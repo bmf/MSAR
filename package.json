@@ -1,0 +1,22 @@
+{
+  "name": "msar",
+  "version": "1.0.0",
+  "description": "The Monthly Status Report (MSR) Webform application allows team members to submit task updates based on assigned PWS line items. These updates are reviewed and approved by team leads and project managers. The system aims to streamline data collection, review, and report generation for monthly project summaries.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.75.0"
+  }
+}
