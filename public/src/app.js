@@ -7,6 +7,7 @@ $(document).ready(function() {
 
     // --- INITIALIZATION ---
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    window.msrSupabase = supabase; // expose for console diagnostics
     let currentUser = null;
 
     // --- HTML TEMPLATES ---
@@ -77,12 +78,255 @@ $(document).ready(function() {
     function router() {
         const hash = window.location.hash.substring(1);
         if (currentUser) {
-            // If logged in, show the dashboard
             $('#main-content').html(dashboardPage);
+            initializeDashboard();
         } else {
             // If not logged in, show the login page
             $('#main-content').html(loginPage);
         }
+    }
+
+    function initializeDashboard() {
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Dashboard</h2>
+                <button id="new-update-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#new-update-modal">Create New Task Update</button>
+            </div>
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                    <label for="filter-status" class="form-label">Filter by Short Status</label>
+                    <select id="filter-status" class="form-select">
+                        <option value="">All</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Complete">Complete</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="sort-by" class="form-label">Sort by</label>
+                    <select id="sort-by" class="form-select">
+                        <option value="due_date_asc">Due Date ↑</option>
+                        <option value="due_date_desc">Due Date ↓</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle" id="tasks-table">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Start Date</th>
+                            <th>Due Date</th>
+                            <th>Assigned To</th>
+                            <th>PWS Line Item</th>
+                            <th>% Complete</th>
+                            <th>Narrative</th>
+                            <th>Blockers</th>
+                            <th>Short Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="modal fade" id="new-update-modal" tabindex="-1" aria-labelledby="newUpdateModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="newUpdateModalLabel">Create Task Update</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="new-update-form" novalidate>
+                                <div class="mb-3">
+                                    <label for="update-task" class="form-label">Task</label>
+                                    <select id="update-task" class="form-select" required></select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="update-narrative" class="form-label">Narrative</label>
+                                    <textarea id="update-narrative" class="form-control" rows="3" required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="update-percent" class="form-label">% Complete</label>
+                                    <input id="update-percent" type="number" min="0" max="100" class="form-control" required />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="update-blockers" class="form-label">Blockers</label>
+                                    <textarea id="update-blockers" class="form-control" rows="2"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="update-short-status" class="form-label">Short Status</label>
+                                    <select id="update-short-status" class="form-select" required>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="On Hold">On Hold</option>
+                                        <option value="Complete">Complete</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Continue</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('#main-content').html(container);
+
+        const state = { raw: [], filtered: [], mapTasks: [] };
+
+        function readPrefs() {
+            const f = localStorage.getItem('msr_dash_filter') || '';
+            const s = localStorage.getItem('msr_dash_sort') || 'due_date_asc';
+            $('#filter-status').val(f);
+            $('#sort-by').val(s);
+            return { f, s };
+        }
+
+        function writePrefs(f, s) {
+            localStorage.setItem('msr_dash_filter', f);
+            localStorage.setItem('msr_dash_sort', s);
+        }
+
+        function applyFilterSort() {
+            const f = $('#filter-status').val();
+            const s = $('#sort-by').val();
+            let rows = [...state.raw];
+            if (f) rows = rows.filter(r => (r.latest_update && r.latest_update.short_status) === f);
+            rows.sort((a, b) => {
+                const da = a.due_date ? new Date(a.due_date).getTime() : 0;
+                const db = b.due_date ? new Date(b.due_date).getTime() : 0;
+                if (s === 'due_date_desc') return db - da;
+                return da - db;
+            });
+            state.filtered = rows;
+            renderTable();
+            writePrefs(f, s);
+        }
+
+        function renderTable() {
+            const tbody = $('#tasks-table tbody');
+            tbody.empty();
+            if (!state.filtered.length) {
+                tbody.append('<tr><td colspan="9" class="text-muted">No tasks found.</td></tr>');
+                return;
+            }
+            for (const t of state.filtered) {
+                const u = t.latest_update || {};
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(t.task_name || '')}</td>
+                        <td>${formatDate(t.start_date)}</td>
+                        <td>${formatDate(t.due_date)}</td>
+                        <td>${escapeHtml(t.assigned_label || '')}</td>
+                        <td>${escapeHtml(t.pws_line_item || '')}</td>
+                        <td>${u.percent_complete != null ? u.percent_complete + '%' : ''}</td>
+                        <td>${escapeHtml(u.narrative || '')}</td>
+                        <td>${escapeHtml(u.blockers || '')}</td>
+                        <td>${escapeHtml(u.short_status || '')}</td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function formatDate(d) {
+            if (!d) return '';
+            const dt = new Date(d);
+            return isNaN(dt.getTime()) ? '' : dt.toLocaleDateString();
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function fetchTasksAndUpdates() {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) return [];
+            const { data: tasks, error: tasksError } = await supabase
+                .from('pws_tasks')
+                .select('id, task_name, pws_line_item, start_date, due_date, assigned_to')
+                .eq('assigned_to', user.id);
+            if (tasksError) return [];
+            const results = await Promise.all(tasks.map(async t => {
+                const { data: updates } = await supabase
+                    .from('updates')
+                    .select('id, narrative, percent_complete, blockers, short_status, created_at')
+                    .eq('task_id', t.id)
+                    .eq('user_id', user.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                const latest = updates && updates.length ? updates[0] : null;
+                return {
+                    ...t,
+                    assigned_label: user.email || 'Me',
+                    latest_update: latest
+                };
+            }));
+            return results;
+        }
+
+        async function load() {
+            readPrefs();
+            const rows = await fetchTasksAndUpdates();
+            state.raw = rows;
+            populateTaskSelect(rows);
+            updateModalState(rows);
+            applyFilterSort();
+        }
+
+        function populateTaskSelect(rows) {
+            const sel = $('#update-task');
+            sel.empty();
+            for (const t of rows) {
+                sel.append(`<option value="${t.id}">${escapeHtml(t.task_name)}</option>`);
+            }
+        }
+
+        function updateModalState(rows) {
+            const sel = $('#update-task');
+            const helperId = 'no-tasks-help';
+            $(`#${helperId}`).remove();
+            if (!rows || rows.length === 0) {
+                sel.prop('disabled', true);
+                sel.removeAttr('required');
+                sel.empty().append('<option value="">No assigned tasks</option>');
+                const help = $(`<div id="${helperId}" class="alert alert-info mt-2">No tasks are assigned to you yet. Ask your Team Lead to assign a task before creating an update.</div>`);
+                sel.closest('.mb-3').after(help);
+            } else {
+                sel.prop('disabled', false);
+                sel.attr('required', '');
+            }
+        }
+
+        $(document).off('submit', '#new-update-form').on('submit', '#new-update-form', function(e) {
+            e.preventDefault();
+            const modalEl = document.getElementById('new-update-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            // Try to hide via Bootstrap API
+            modal.hide();
+            // Fallback cleanup for environments where transitions/dialogs interfere
+            setTimeout(() => {
+                const stillVisible = modalEl.classList.contains('show') || modalEl.getAttribute('aria-hidden') !== 'true';
+                if (stillVisible) {
+                    modalEl.classList.remove('show');
+                    modalEl.setAttribute('aria-hidden', 'true');
+                    modalEl.style.display = 'none';
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(b => b.parentNode && b.parentNode.removeChild(b));
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('padding-right');
+                }
+            }, 50);
+            alert('Draft creation will be implemented in Phase 5.');
+        });
+
+        load();
     }
 
     // --- AUTHENTICATION ---
