@@ -72,16 +72,16 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ## Phase 4 — Dashboard
 
-- [ ] **4.1 Create Dashboard View**
+- [x] **4.1 Create Dashboard View**
   - *Acceptance Criteria:* Displays assigned tasks for the logged-in user; matches PRD-specified columns.
 
-- [ ] **4.2 Add Filtering and Sorting**
+- [x] **4.2 Add Filtering and Sorting**
   - *Acceptance Criteria:* Users can filter by status and sort by due date; filter states persist through navigation.
 
-- [ ] **4.3 Add “Create New Task Update” Button**
+- [x] **4.3 Add “Create New Task Update” Button**
   - *Acceptance Criteria:* Opens modal or form for task update; accessible only to authenticated users.
 
-- [ ] **4.4 Write Dashboard Tests**
+- [x] **4.4 Write Dashboard Tests**
   - *Acceptance Criteria:* Playwright verifies visibility of data, filtering, and modal open behavior.
 
 ---
