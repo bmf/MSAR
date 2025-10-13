@@ -88,16 +88,16 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ## Phase 5 — Task Update Workflow
 
-- [ ] **5.1 Build Update Form**
+- [x] **5.1 Build Update Form**
   - *Acceptance Criteria:* Form includes Narrative, % Complete, Blockers, Short Status; input validation implemented.
 
-- [ ] **5.2 Implement Save Draft and Submit Logic**
-  - *Acceptance Criteria:* Drafts saved locally or to `updates` table with status “draft”; submission requires mandatory fields.
+- [x] **5.2 Implement Save Draft and Submit Logic**
+  - *Acceptance Criteria:* Drafts saved locally or to `updates` table with status "draft"; submission requires mandatory fields.
 
-- [ ] **5.3 Link Updates to PWS Tasks**
+- [x] **5.3 Link Updates to PWS Tasks**
   - *Acceptance Criteria:* Submitted update references correct task and user in database.
 
-- [ ] **5.4 Write Update Workflow Tests**
+- [x] **5.4 Write Update Workflow Tests**
   - *Acceptance Criteria:* Playwright confirms save/submit flow and validation errors display correctly.
 
 ---

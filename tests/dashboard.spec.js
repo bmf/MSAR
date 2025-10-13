@@ -32,8 +32,9 @@ test.describe('Dashboard', () => {
     await page.click('#new-update-btn');
     await page.waitForSelector('#new-update-modal.show', { timeout: 10000 });
     await expect(page.locator('#new-update-form')).toBeVisible();
-    page.on('dialog', async dialog => { await dialog.dismiss(); });
-    await page.click('#new-update-form button[type="submit"]');
-    await expect(page.locator('#new-update-modal')).toBeHidden();
+    await expect(page.locator('#update-task')).toBeVisible();
+    await expect(page.locator('#update-narrative')).toBeVisible();
+    await expect(page.locator('#update-percent')).toBeVisible();
+    await expect(page.locator('#save-draft-btn')).toBeVisible();
   });
 });

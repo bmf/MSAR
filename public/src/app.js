@@ -137,32 +137,42 @@ $(document).ready(function() {
                             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body">
+                            <div id="update-form-error" class="alert alert-danger" style="display: none;"></div>
                             <form id="new-update-form" novalidate>
                                 <div class="mb-3">
-                                    <label for="update-task" class="form-label">Task</label>
+                                    <label for="update-task" class="form-label">Task <span class="text-danger">*</span></label>
                                     <select id="update-task" class="form-select" required></select>
+                                    <div class="invalid-feedback">Please select a task.</div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="update-narrative" class="form-label">Narrative</label>
+                                    <label for="update-narrative" class="form-label">Narrative <span class="text-danger">*</span></label>
                                     <textarea id="update-narrative" class="form-control" rows="3" required></textarea>
+                                    <div class="invalid-feedback">Please provide a narrative description.</div>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="update-percent" class="form-label">% Complete</label>
+                                    <label for="update-percent" class="form-label">% Complete <span class="text-danger">*</span></label>
                                     <input id="update-percent" type="number" min="0" max="100" class="form-control" required />
+                                    <div class="invalid-feedback">Please enter a value between 0 and 100.</div>
                                 </div>
                                 <div class="mb-3">
                                     <label for="update-blockers" class="form-label">Blockers</label>
                                     <textarea id="update-blockers" class="form-control" rows="2"></textarea>
+                                    <small class="form-text text-muted">Optional: Describe any blockers or issues.</small>
                                 </div>
                                 <div class="mb-3">
-                                    <label for="update-short-status" class="form-label">Short Status</label>
+                                    <label for="update-short-status" class="form-label">Short Status <span class="text-danger">*</span></label>
                                     <select id="update-short-status" class="form-select" required>
+                                        <option value="">Select status...</option>
                                         <option value="In Progress">In Progress</option>
                                         <option value="On Hold">On Hold</option>
                                         <option value="Complete">Complete</option>
                                     </select>
+                                    <div class="invalid-feedback">Please select a status.</div>
                                 </div>
-                                <button type="submit" class="btn btn-primary">Continue</button>
+                                <div class="d-flex gap-2">
+                                    <button type="button" id="save-draft-btn" class="btn btn-secondary">Save Draft</button>
+                                    <button type="submit" class="btn btn-primary">Submit</button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -304,13 +314,96 @@ $(document).ready(function() {
             }
         }
 
-        $(document).off('submit', '#new-update-form').on('submit', '#new-update-form', function(e) {
-            e.preventDefault();
+        function validateForm() {
+            const form = document.getElementById('new-update-form');
+            const taskId = $('#update-task').val();
+            const narrative = $('#update-narrative').val().trim();
+            const percent = $('#update-percent').val();
+            const shortStatus = $('#update-short-status').val();
+
+            let isValid = true;
+
+            // Reset validation states
+            form.querySelectorAll('.form-control, .form-select').forEach(el => {
+                el.classList.remove('is-invalid');
+            });
+            $('#update-form-error').hide();
+
+            // Validate task selection
+            if (!taskId) {
+                $('#update-task').addClass('is-invalid');
+                isValid = false;
+            }
+
+            // Validate narrative
+            if (!narrative) {
+                $('#update-narrative').addClass('is-invalid');
+                isValid = false;
+            }
+
+            // Validate percent complete
+            const percentNum = parseInt(percent, 10);
+            if (percent === '' || isNaN(percentNum) || percentNum < 0 || percentNum > 100) {
+                $('#update-percent').addClass('is-invalid');
+                isValid = false;
+            }
+
+            // Validate short status
+            if (!shortStatus) {
+                $('#update-short-status').addClass('is-invalid');
+                isValid = false;
+            }
+
+            return isValid;
+        }
+
+        async function saveUpdate(isDraft) {
+            if (!isDraft && !validateForm()) {
+                return false;
+            }
+
+            const taskId = $('#update-task').val();
+            const narrative = $('#update-narrative').val().trim();
+            const percent = $('#update-percent').val();
+            const blockers = $('#update-blockers').val().trim();
+            const shortStatus = $('#update-short-status').val();
+
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) {
+                $('#update-form-error').text('You must be logged in to save updates.').show();
+                return false;
+            }
+
+            const updateData = {
+                task_id: taskId,
+                user_id: user.id,
+                narrative: narrative || null,
+                percent_complete: percent ? parseInt(percent, 10) : null,
+                blockers: blockers || null,
+                short_status: shortStatus || null,
+                status: isDraft ? 'draft' : 'submitted',
+                submitted_at: isDraft ? null : new Date().toISOString()
+            };
+
+            const { data, error } = await supabase
+                .from('updates')
+                .insert([updateData])
+                .select();
+
+            if (error) {
+                $('#update-form-error').text('Error saving update: ' + error.message).show();
+                return false;
+            }
+
+            return true;
+        }
+
+        function closeModal() {
             const modalEl = document.getElementById('new-update-modal');
             const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-            // Try to hide via Bootstrap API
             modal.hide();
-            // Fallback cleanup for environments where transitions/dialogs interfere
+            // Fallback cleanup
             setTimeout(() => {
                 const stillVisible = modalEl.classList.contains('show') || modalEl.getAttribute('aria-hidden') !== 'true';
                 if (stillVisible) {
@@ -323,7 +416,44 @@ $(document).ready(function() {
                     document.body.style.removeProperty('padding-right');
                 }
             }, 50);
-            alert('Draft creation will be implemented in Phase 5.');
+        }
+
+        function resetForm() {
+            const form = document.getElementById('new-update-form');
+            form.reset();
+            form.querySelectorAll('.form-control, .form-select').forEach(el => {
+                el.classList.remove('is-invalid');
+            });
+            $('#update-form-error').hide();
+        }
+
+        // Handle Save Draft button
+        $(document).off('click', '#save-draft-btn').on('click', '#save-draft-btn', async function(e) {
+            e.preventDefault();
+            const success = await saveUpdate(true);
+            if (success) {
+                closeModal();
+                resetForm();
+                alert('Draft saved successfully!');
+                load(); // Reload dashboard to show updated data
+            }
+        });
+
+        // Handle Submit button
+        $(document).off('submit', '#new-update-form').on('submit', '#new-update-form', async function(e) {
+            e.preventDefault();
+            const success = await saveUpdate(false);
+            if (success) {
+                closeModal();
+                resetForm();
+                alert('Update submitted successfully!');
+                load(); // Reload dashboard to show updated data
+            }
+        });
+
+        // Reset form when modal is closed
+        $(document).off('hidden.bs.modal', '#new-update-modal').on('hidden.bs.modal', '#new-update-modal', function() {
+            resetForm();
         });
 
         load();
