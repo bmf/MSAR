@@ -8,7 +8,8 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test",
+    "db:migrate:phase1": "node database/apply-phase1-migrations.js"
   },
   "keywords": [],
   "author": "",
