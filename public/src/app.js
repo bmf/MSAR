@@ -1341,23 +1341,27 @@ $(document).ready(function() {
         e.preventDefault();
         const email = $('#email').val();
         const password = $('#password').val();
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-            $('#error-message').text(error.message).show();
-        } else {
-            currentUser = data.user;
-            window.location.hash = 'dashboard'; // Go to dashboard
-            updateUI();
-            router();
+        
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            
+            if (error) {
+                $('#error-message').text(error.message).show();
+            } else {
+                currentUser = data.user;
+                await updateUI();
+                window.location.hash = 'dashboard'; // Go to dashboard - hashchange event will trigger router
+            }
+        } catch (err) {
+            $('#error-message').text('An error occurred during login: ' + err.message).show();
         }
     });
 
     $(document).on('click', '#logout-btn', async function() {
         await supabase.auth.signOut();
         currentUser = null;
-        window.location.hash = ''; // Go to login page
-        updateUI();
-        router();
+        await updateUI();
+        window.location.hash = ''; // Go to login page - hashchange event will trigger router
     });
 
     $(document).on('submit', '#request-account-form', async function(e) {

@@ -17,6 +17,7 @@
     "@playwright/test": "^1.56.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.75.0"
+    "@supabase/supabase-js": "^2.75.0",
+    "dotenv": "^16.4.5"
   }
 }

@@ -1,11 +1,15 @@
 const { test, expect } = require('@playwright/test');
+require('dotenv').config();
+
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || '';
 
 test.describe('Update Workflow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('http://localhost:3000');
     await page.waitForSelector('#login-form', { timeout: 10000 });
-    await page.fill('#email', 'flade@falconwood.biz');
-    await page.fill('#password', 'New25Password!@');
+    await page.fill('#email', ADMIN_EMAIL);
+    await page.fill('#password', ADMIN_PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL('**/#dashboard');
     await expect(page.locator('#main-content h2')).toHaveText('Dashboard', { timeout: 10000 });

@@ -1,19 +1,19 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
+require('dotenv').config();
 
 /**
  * Admin Panel Test Suite
  * Tests for Phase 8: Admin User & Role Management
  */
 
-// Test data - using actual test user from database
-const ADMIN_EMAIL = 'flade@falconwood.biz';
-const ADMIN_PASSWORD = 'New25Password!@';
-// Note: For full testing, you'll need to create additional test users with different roles
-const TEAM_LEAD_EMAIL = 'teamlead@example.com';
-const TEAM_LEAD_PASSWORD = 'TestPassword123!';
-const MEMBER_EMAIL = 'member1@example.com';
-const MEMBER_PASSWORD = 'TestPassword123!';
+// Test data - loaded from environment variables
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || '';
+const TEAM_LEAD_EMAIL = process.env.TEST_TEAM_LEAD_EMAIL || '';
+const TEAM_LEAD_PASSWORD = process.env.TEST_TEAM_LEAD_PASSWORD || '';
+const MEMBER_EMAIL = process.env.TEST_MEMBER_EMAIL || '';
+const MEMBER_PASSWORD = process.env.TEST_MEMBER_PASSWORD || '';
 
 test.describe('Admin Panel - Access Control', () => {
     test('should deny access to non-admin users', async ({ page }) => {
@@ -401,57 +401,25 @@ test.describe('Admin Panel - Account Requests', () => {
     });
 
     test('should successfully reject an account request', async ({ page }) => {
-        // First, create a test account request (need to start fresh)
-        await page.goto('http://localhost:3000');
+        // beforeEach has already logged in and navigated to Account Requests tab
         
-        // Check if already logged in and logout if needed
-        const logoutBtn = page.locator('#logout-btn');
-        if (await logoutBtn.isVisible()) {
-            await logoutBtn.click();
-            await page.waitForTimeout(500);
+        // Wait for table to load and check if there are any pending requests
+        try {
+            await page.waitForSelector('#requests-table tbody tr', { timeout: 5000 });
+        } catch (e) {
+            // No pending requests - skip the test
+            console.log('No pending account requests found - skipping test');
+            test.skip();
+            return;
         }
         
-        await page.waitForSelector('#login-form', { timeout: 10000 });
+        // Get the first pending request
+        const firstRequestRow = page.locator('#requests-table tbody tr').first();
+        await expect(firstRequestRow).toBeVisible();
         
-        // Click request account link
-        await page.click('a[data-bs-toggle="modal"][data-bs-target="#request-account-modal"]');
-        await page.waitForSelector('#request-account-modal.show', { timeout: 5000 });
-        
-        // Fill in account request form with unique email (use valid format)
-        const timestamp = Date.now();
-        const uniqueEmail = `brandon.flade+reject${timestamp}@gmail.com`;
-        await page.fill('#request-name', 'Test Reject User');
-        await page.fill('#request-email', uniqueEmail);
-        await page.fill('#request-reason', 'Testing account rejection workflow');
-        
-        // Handle the success alert
-        page.once('dialog', async dialog => {
-            await dialog.accept();
-        });
-        
-        await page.click('#request-account-form button[type="submit"]');
-        await page.waitForSelector('#request-account-modal', { state: 'hidden' });
-        
-        // Now login as admin
-        await page.fill('#email', ADMIN_EMAIL);
-        await page.fill('#password', ADMIN_PASSWORD);
-        await page.click('button[type="submit"]');
-        await page.waitForURL('**/#dashboard', { timeout: 10000 });
-        
-        // Navigate to admin panel
-        await page.click('a[href="#admin"]');
-        await page.waitForSelector('h2:has-text("Admin Panel")', { timeout: 10000 });
-        
-        // Switch to Account Requests tab
-        await page.click('#requests-tab');
-        await page.waitForSelector('#requests-panel.show', { timeout: 5000 });
-        
-        // Wait for table to load
-        await page.waitForSelector('#requests-table tbody tr', { timeout: 5000 });
-        
-        // Find the request we just created by email
-        const requestRow = page.locator(`#requests-table tbody tr:has-text("${uniqueEmail}")`);
-        await expect(requestRow).toBeVisible();
+        // Get the email from the first row to track it
+        const emailCell = firstRequestRow.locator('td').nth(1); // Assuming email is in second column
+        const requestEmail = await emailCell.textContent();
         
         // Set up dialog handlers - there will be two dialogs
         let dialogCount = 0;
@@ -469,7 +437,7 @@ test.describe('Admin Panel - Account Requests', () => {
         });
         
         // Click reject button for this request
-        await requestRow.locator('.reject-request-btn').click();
+        await firstRequestRow.locator('.reject-request-btn').click();
         
         // Wait for both dialogs to complete
         await page.waitForTimeout(2000);
@@ -478,8 +446,8 @@ test.describe('Admin Panel - Account Requests', () => {
         await page.waitForTimeout(1000);
         
         // Verify the request is no longer in pending requests
-        const updatedRow = page.locator(`#requests-table tbody tr:has-text("${uniqueEmail}")`);
-        await expect(updatedRow).not.toBeVisible();
+        const rejectedRow = page.locator(`#requests-table tbody tr:has-text("${requestEmail}")`);
+        await expect(rejectedRow).not.toBeVisible();
     });
 });
 

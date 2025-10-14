@@ -1,4 +1,8 @@
 const { test, expect } = require('@playwright/test');
+require('dotenv').config();
+
+const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || '';
+const ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || '';
 
 test.describe('Authentication and Account Request', () => {
     test.beforeEach(async ({ page }) => {
@@ -9,8 +13,8 @@ test.describe('Authentication and Account Request', () => {
 
     test('should allow a user to log in with valid credentials', async ({ page }) => {
         // Use the admin user for the test
-        await page.fill('#email', 'flade@falconwood.biz');
-        await page.fill('#password', 'New25Password!@');
+        await page.fill('#email', ADMIN_EMAIL);
+        await page.fill('#password', ADMIN_PASSWORD);
         await page.click('button[type="submit"]');
 
         // Wait for navigation to the dashboard and for the dashboard content to load
