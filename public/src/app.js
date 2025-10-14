@@ -15,8 +15,8 @@ $(document).ready(function() {
         <header class="bg-light p-3 mb-4 border-bottom">
             <div class="container">
                 <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
-                    <a href="/" class="d-flex align-items-center mb-2 mb-lg-0 text-dark text-decoration-none"><h4>MSR Webform</h4></a>
-                    <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0"></ul>
+                    <a href="#dashboard" class="d-flex align-items-center mb-2 mb-lg-0 text-dark text-decoration-none"><h4>MSR Webform</h4></a>
+                    <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0" id="main-nav"></ul>
                     <div class="text-end">
                         <button type="button" class="btn btn-outline-primary me-2" id="login-btn">Login</button>
                         <button type="button" class="btn btn-primary" id="logout-btn" style="display: none;">Logout</button>
@@ -78,8 +78,12 @@ $(document).ready(function() {
     function router() {
         const hash = window.location.hash.substring(1);
         if (currentUser) {
-            $('#main-content').html(dashboardPage);
-            initializeDashboard();
+            if (hash === 'review') {
+                initializeReviewQueue();
+            } else {
+                $('#main-content').html(dashboardPage);
+                initializeDashboard();
+            }
         } else {
             // If not logged in, show the login page
             $('#main-content').html(loginPage);
@@ -459,21 +463,368 @@ $(document).ready(function() {
         load();
     }
 
+    // --- REVIEW QUEUE ---
+    async function initializeReviewQueue() {
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Review Queue</h2>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle" id="review-table">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>Submitted By</th>
+                            <th>Submitted At</th>
+                            <th>% Complete</th>
+                            <th>Short Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="modal fade" id="review-detail-modal" tabindex="-1" aria-labelledby="reviewDetailModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="reviewDetailModalLabel">Review Submission</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="review-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <div id="review-details"></div>
+                            <form id="review-form">
+                                <input type="hidden" id="review-update-id" />
+                                <div class="mb-3">
+                                    <label for="review-narrative" class="form-label">Narrative</label>
+                                    <textarea id="review-narrative" class="form-control" rows="3"></textarea>
+                                    <small class="form-text text-muted">You can modify the narrative before approving.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="review-percent" class="form-label">% Complete</label>
+                                    <input id="review-percent" type="number" min="0" max="100" class="form-control" />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="review-blockers" class="form-label">Blockers</label>
+                                    <textarea id="review-blockers" class="form-control" rows="2"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="review-short-status" class="form-label">Short Status</label>
+                                    <select id="review-short-status" class="form-select">
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="On Hold">On Hold</option>
+                                        <option value="Complete">Complete</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="review-comments" class="form-label">Comments</label>
+                                    <textarea id="review-comments" class="form-control" rows="2" placeholder="Optional comments for the team member"></textarea>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button type="button" id="approve-btn" class="btn btn-success">Approve</button>
+                                    <button type="button" id="approve-with-changes-btn" class="btn btn-primary">Approve with Changes</button>
+                                    <button type="button" id="reject-btn" class="btn btn-danger">Reject</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('#main-content').html(container);
+
+        const state = { submissions: [] };
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatDateTime(d) {
+            if (!d) return '';
+            const dt = new Date(d);
+            return isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+        }
+
+        async function fetchPendingSubmissions() {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) return [];
+
+            // Get current user's profile to check role and team
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role, team')
+                .eq('id', user.id)
+                .single();
+
+            if (!profile || profile.role !== 'Team Lead') {
+                return [];
+            }
+
+            // Get team members from the same team
+            const { data: teamMembers } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('team', profile.team);
+
+            if (!teamMembers || teamMembers.length === 0) return [];
+
+            const teamMemberIds = teamMembers.map(m => m.id);
+            const teamMemberMap = {};
+            teamMembers.forEach(m => {
+                teamMemberMap[m.id] = m.full_name;
+            });
+
+            // Get submitted updates from team members
+            const { data: updates, error } = await supabase
+                .from('updates')
+                .select('id, task_id, user_id, narrative, percent_complete, blockers, short_status, submitted_at')
+                .eq('status', 'submitted')
+                .in('user_id', teamMemberIds)
+                .order('submitted_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching submissions:', error);
+                return [];
+            }
+
+            if (!updates || updates.length === 0) return [];
+
+            // Get task names for all updates
+            const taskIds = [...new Set(updates.map(u => u.task_id))];
+            const { data: tasks } = await supabase
+                .from('pws_tasks')
+                .select('id, task_name')
+                .in('id', taskIds);
+
+            const taskMap = {};
+            if (tasks) {
+                tasks.forEach(t => {
+                    taskMap[t.id] = t.task_name;
+                });
+            }
+
+            return updates.map(u => ({
+                ...u,
+                task_name: taskMap[u.task_id] || 'Unknown Task',
+                submitted_by: teamMemberMap[u.user_id] || 'Unknown User'
+            }));
+        }
+
+        function renderTable() {
+            const tbody = $('#review-table tbody');
+            tbody.empty();
+            if (!state.submissions.length) {
+                tbody.append('<tr><td colspan="6" class="text-muted">No pending submissions.</td></tr>');
+                return;
+            }
+            for (const s of state.submissions) {
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(s.task_name)}</td>
+                        <td>${escapeHtml(s.submitted_by)}</td>
+                        <td>${formatDateTime(s.submitted_at)}</td>
+                        <td>${s.percent_complete != null ? s.percent_complete + '%' : ''}</td>
+                        <td>${escapeHtml(s.short_status || '')}</td>
+                        <td><button class="btn btn-sm btn-primary review-btn" data-id="${s.id}">Review</button></td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        async function load() {
+            const submissions = await fetchPendingSubmissions();
+            state.submissions = submissions;
+            renderTable();
+        }
+
+        function openReviewModal(updateId) {
+            const submission = state.submissions.find(s => s.id === updateId);
+            if (!submission) return;
+
+            $('#review-update-id').val(submission.id);
+            $('#review-narrative').val(submission.narrative || '');
+            $('#review-percent').val(submission.percent_complete || '');
+            $('#review-blockers').val(submission.blockers || '');
+            $('#review-short-status').val(submission.short_status || 'In Progress');
+            $('#review-comments').val('');
+
+            const details = `
+                <div class="mb-3">
+                    <strong>Task:</strong> ${escapeHtml(submission.task_name)}<br>
+                    <strong>Submitted By:</strong> ${escapeHtml(submission.submitted_by)}<br>
+                    <strong>Submitted At:</strong> ${formatDateTime(submission.submitted_at)}
+                </div>
+            `;
+            $('#review-details').html(details);
+
+            const modalEl = document.getElementById('review-detail-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+
+        async function processReview(action) {
+            const updateId = $('#review-update-id').val();
+            const comments = $('#review-comments').val().trim();
+            
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) {
+                $('#review-form-error').text('You must be logged in to review submissions.').show();
+                return false;
+            }
+
+            let newStatus = 'submitted';
+            let approvalStatus = '';
+
+            if (action === 'approve') {
+                newStatus = 'approved';
+                approvalStatus = 'approved';
+            } else if (action === 'approve_with_changes') {
+                newStatus = 'approved';
+                approvalStatus = 'modified';
+                
+                // Update the submission with modified values
+                const narrative = $('#review-narrative').val().trim();
+                const percent = $('#review-percent').val();
+                const blockers = $('#review-blockers').val().trim();
+                const shortStatus = $('#review-short-status').val();
+
+                const { error: updateError } = await supabase
+                    .from('updates')
+                    .update({
+                        narrative: narrative,
+                        percent_complete: percent ? parseInt(percent, 10) : null,
+                        blockers: blockers || null,
+                        short_status: shortStatus
+                    })
+                    .eq('id', updateId);
+
+                if (updateError) {
+                    $('#review-form-error').text('Error updating submission: ' + updateError.message).show();
+                    return false;
+                }
+            } else if (action === 'reject') {
+                newStatus = 'rejected';
+                approvalStatus = 'rejected';
+            }
+
+            // Update the status of the update
+            const { error: statusError } = await supabase
+                .from('updates')
+                .update({ status: newStatus })
+                .eq('id', updateId);
+
+            if (statusError) {
+                $('#review-form-error').text('Error updating status: ' + statusError.message).show();
+                return false;
+            }
+
+            // Create approval record
+            const { error: approvalError } = await supabase
+                .from('approvals')
+                .insert([{
+                    update_id: updateId,
+                    approver_id: user.id,
+                    status: approvalStatus,
+                    comments: comments || null
+                }]);
+
+            if (approvalError) {
+                $('#review-form-error').text('Error creating approval record: ' + approvalError.message).show();
+                return false;
+            }
+
+            return true;
+        }
+
+        function closeModal() {
+            const modalEl = document.getElementById('review-detail-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            modal.hide();
+        }
+
+        // Event handlers
+        $(document).off('click', '.review-btn').on('click', '.review-btn', function() {
+            const updateId = $(this).data('id');
+            openReviewModal(updateId);
+        });
+
+        $(document).off('click', '#approve-btn').on('click', '#approve-btn', async function() {
+            const success = await processReview('approve');
+            if (success) {
+                closeModal();
+                alert('Submission approved successfully!');
+                load();
+            }
+        });
+
+        $(document).off('click', '#approve-with-changes-btn').on('click', '#approve-with-changes-btn', async function() {
+            const success = await processReview('approve_with_changes');
+            if (success) {
+                closeModal();
+                alert('Submission approved with changes!');
+                load();
+            }
+        });
+
+        $(document).off('click', '#reject-btn').on('click', '#reject-btn', async function() {
+            const comments = $('#review-comments').val().trim();
+            if (!comments) {
+                $('#review-form-error').text('Please provide comments when rejecting a submission.').show();
+                return;
+            }
+            const success = await processReview('reject');
+            if (success) {
+                closeModal();
+                alert('Submission rejected.');
+                load();
+            }
+        });
+
+        load();
+    }
+
     // --- AUTHENTICATION ---
     async function checkSession() {
         const { data } = await supabase.auth.getSession();
         currentUser = data.session ? data.session.user : null;
-        updateUI();
+        await updateUI();
         router(); // Route after checking auth status
     }
 
-    function updateUI() {
+    async function updateUI() {
         if (currentUser) {
             $('#login-btn').hide();
             $('#logout-btn').show();
+            
+            // Update navigation based on user role
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', currentUser.id)
+                .single();
+            
+            const nav = $('#main-nav');
+            nav.empty();
+            nav.append('<li class="nav-item"><a href="#dashboard" class="nav-link">Dashboard</a></li>');
+            
+            if (profile && (profile.role === 'Team Lead' || profile.role === 'Admin')) {
+                nav.append('<li class="nav-item"><a href="#review" class="nav-link">Review Queue</a></li>');
+            }
         } else {
             $('#login-btn').show();
             $('#logout-btn').hide();
+            $('#main-nav').empty();
         }
     }
 

@@ -104,16 +104,16 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ## Phase 6 — Team Lead Review
 
-- [ ] **6.1 Create Review Queue View**
-  - *Acceptance Criteria:* Shows list of pending submissions filtered by team lead’s team.
+- [x] **6.1 Create Review Queue View**
+  - *Acceptance Criteria:* Shows list of pending submissions filtered by team lead's team.
 
-- [ ] **6.2 Build Review Detail Panel**
+- [x] **6.2 Build Review Detail Panel**
   - *Acceptance Criteria:* Displays submission details and allows Approve, Reject, or Modify actions.
 
-- [ ] **6.3 Update Approval Logic**
+- [x] **6.3 Update Approval Logic**
   - *Acceptance Criteria:* Approved or rejected updates create entries in `approvals` table; UI reflects state change.
 
-- [ ] **6.4 Write Review Tests**
+- [x] **6.4 Write Review Tests**
   - *Acceptance Criteria:* Playwright verifies permission checks, approve/reject actions, and UI refresh behavior.
 
 ---
