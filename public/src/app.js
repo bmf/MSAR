@@ -80,6 +80,8 @@ $(document).ready(function() {
         if (currentUser) {
             if (hash === 'review') {
                 initializeReviewQueue();
+            } else if (hash === 'admin') {
+                initializeAdminPanel();
             } else {
                 $('#main-content').html(dashboardPage);
                 initializeDashboard();
@@ -794,6 +796,508 @@ $(document).ready(function() {
         load();
     }
 
+    // --- ADMIN PANEL ---
+    async function initializeAdminPanel() {
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Admin Panel</h2>
+            </div>
+            
+            <ul class="nav nav-tabs mb-3" id="admin-tabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users-panel" type="button" role="tab">Users</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="requests-tab" data-bs-toggle="tab" data-bs-target="#requests-panel" type="button" role="tab">Account Requests</button>
+                </li>
+            </ul>
+            
+            <div class="tab-content" id="admin-tab-content">
+                <div class="tab-pane fade show active" id="users-panel" role="tabpanel">
+                    <h4>User Management</h4>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Username</th>
+                                    <th>Full Name</th>
+                                    <th>Role</th>
+                                    <th>Team</th>
+                                    <th>Created At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="requests-panel" role="tabpanel">
+                    <h4>Pending Account Requests</h4>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="requests-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Reason</th>
+                                    <th>Requested At</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Role Modal -->
+            <div class="modal fade" id="edit-role-modal" tabindex="-1" aria-labelledby="editRoleModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="editRoleModalLabel">Edit User Role</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="role-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="edit-role-form">
+                                <input type="hidden" id="edit-user-id" />
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>User:</strong></label>
+                                    <p id="edit-user-name"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-role" class="form-label">Role</label>
+                                    <select id="edit-role" class="form-select" required>
+                                        <option value="Team Member">Team Member</option>
+                                        <option value="Team Lead">Team Lead</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="Report Approver">Report Approver</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-team" class="form-label">Team</label>
+                                    <input type="text" id="edit-team" class="form-control" placeholder="e.g., Alpha, Bravo" />
+                                </div>
+                                <button type="submit" class="btn btn-primary">Update Role</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Approve Account Modal -->
+            <div class="modal fade" id="approve-account-modal" tabindex="-1" aria-labelledby="approveAccountModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="approveAccountModalLabel">Approve Account Request</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="approve-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="approve-account-form">
+                                <input type="hidden" id="approve-request-id" />
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Name:</strong></label>
+                                    <p id="approve-request-name"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Email:</strong></label>
+                                    <p id="approve-request-email"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label"><strong>Reason:</strong></label>
+                                    <p id="approve-request-reason"></p>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="approve-password" class="form-label">Initial Password</label>
+                                    <input type="password" id="approve-password" class="form-control" required placeholder="Set initial password for user" />
+                                    <small class="form-text text-muted">User will be able to change this after first login.</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="approve-role" class="form-label">Role</label>
+                                    <select id="approve-role" class="form-select" required>
+                                        <option value="Team Member">Team Member</option>
+                                        <option value="Team Lead">Team Lead</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="Report Approver">Report Approver</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="approve-team" class="form-label">Team</label>
+                                    <input type="text" id="approve-team" class="form-control" placeholder="e.g., Alpha, Bravo" />
+                                </div>
+                                <button type="submit" class="btn btn-success">Approve & Create User</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        $('#main-content').html(container);
+
+        const state = { users: [], requests: [] };
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        function formatDateTime(d) {
+            if (!d) return '';
+            const dt = new Date(d);
+            return isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+        }
+
+        // Check if current user is admin
+        async function checkAdminAccess() {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) return false;
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single();
+
+            if (!profile || profile.role !== 'Admin') {
+                $('#main-content').html('<div class="alert alert-danger">Access Denied: Admin privileges required.</div>');
+                return false;
+            }
+
+            return true;
+        }
+
+        async function fetchUsers() {
+            // Fetch all users from profiles
+            const { data: profiles, error } = await supabase
+                .from('profiles')
+                .select('id, full_name, role, team, created_at, disabled')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching users:', error);
+                return [];
+            }
+
+            // Get auth users to get email addresses
+            // Note: We can't directly query auth.users from client, so we'll use the profile data
+            // In a real implementation, you might need a server-side function to get emails
+            return profiles || [];
+        }
+
+        async function fetchAccountRequests() {
+            const { data: requests, error } = await supabase
+                .from('account_requests')
+                .select('*')
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching account requests:', error);
+                return [];
+            }
+
+            return requests || [];
+        }
+
+        function renderUsersTable() {
+            const tbody = $('#users-table tbody');
+            tbody.empty();
+            if (!state.users.length) {
+                tbody.append('<tr><td colspan="6" class="text-muted">No users found.</td></tr>');
+                return;
+            }
+            for (const u of state.users) {
+                const isDisabled = u.disabled || false;
+                const disabledBadge = isDisabled ? '<span class="badge bg-secondary ms-2">Disabled</span>' : '';
+                const disableButtonText = isDisabled ? 'Enable' : 'Disable';
+                const disableButtonClass = isDisabled ? 'btn-success' : 'btn-warning';
+                
+                const tr = `
+                    <tr class="${isDisabled ? 'table-secondary' : ''}">
+                        <td>${escapeHtml(u.id.substring(0, 8))}...</td>
+                        <td>${escapeHtml(u.full_name || 'N/A')}${disabledBadge}</td>
+                        <td>${escapeHtml(u.role || 'Team Member')}</td>
+                        <td>${escapeHtml(u.team || 'N/A')}</td>
+                        <td>${formatDateTime(u.created_at)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-role-btn" data-id="${u.id}" data-name="${escapeHtml(u.full_name || 'User')}" data-role="${escapeHtml(u.role || 'Team Member')}" data-team="${escapeHtml(u.team || '')}">Edit Role</button>
+                            <button class="btn btn-sm ${disableButtonClass} ms-1 toggle-disable-btn" data-id="${u.id}" data-name="${escapeHtml(u.full_name || 'User')}" data-disabled="${isDisabled}">${disableButtonText}</button>
+                            <button class="btn btn-sm btn-danger ms-1 delete-user-btn" data-id="${u.id}" data-name="${escapeHtml(u.full_name || 'User')}">Delete</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function renderRequestsTable() {
+            const tbody = $('#requests-table tbody');
+            tbody.empty();
+            if (!state.requests.length) {
+                tbody.append('<tr><td colspan="6" class="text-muted">No pending requests.</td></tr>');
+                return;
+            }
+            for (const r of state.requests) {
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(r.name)}</td>
+                        <td>${escapeHtml(r.email)}</td>
+                        <td>${escapeHtml(r.reason || 'N/A')}</td>
+                        <td>${formatDateTime(r.created_at)}</td>
+                        <td><span class="badge bg-warning">${escapeHtml(r.status)}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-success approve-request-btn" data-id="${r.id}" data-name="${escapeHtml(r.name)}" data-email="${escapeHtml(r.email)}" data-reason="${escapeHtml(r.reason || '')}">Approve</button>
+                            <button class="btn btn-sm btn-danger reject-request-btn" data-id="${r.id}">Reject</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        async function load() {
+            const hasAccess = await checkAdminAccess();
+            if (!hasAccess) return;
+
+            state.users = await fetchUsers();
+            state.requests = await fetchAccountRequests();
+            renderUsersTable();
+            renderRequestsTable();
+        }
+
+        // Event handler: Edit Role button
+        $(document).off('click', '.edit-role-btn').on('click', '.edit-role-btn', function() {
+            const userId = $(this).data('id');
+            const userName = $(this).data('name');
+            const userRole = $(this).data('role');
+            const userTeam = $(this).data('team');
+
+            $('#edit-user-id').val(userId);
+            $('#edit-user-name').text(userName);
+            $('#edit-role').val(userRole);
+            $('#edit-team').val(userTeam);
+            $('#role-form-error').hide();
+
+            const modalEl = document.getElementById('edit-role-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        // Event handler: Edit Role form submit
+        $(document).off('submit', '#edit-role-form').on('submit', '#edit-role-form', async function(e) {
+            e.preventDefault();
+
+            const userId = $('#edit-user-id').val();
+            const newRole = $('#edit-role').val();
+            const newTeam = $('#edit-team').val().trim();
+
+            const { error } = await supabase
+                .from('profiles')
+                .update({ role: newRole, team: newTeam || null })
+                .eq('id', userId);
+
+            if (error) {
+                $('#role-form-error').text('Error updating role: ' + error.message).show();
+                return;
+            }
+
+            const modalEl = document.getElementById('edit-role-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+
+            alert('User role updated successfully!');
+            load(); // Reload data
+        });
+
+        // Event handler: Approve Request button
+        $(document).off('click', '.approve-request-btn').on('click', '.approve-request-btn', function() {
+            const requestId = $(this).data('id');
+            const requestName = $(this).data('name');
+            const requestEmail = $(this).data('email');
+            const requestReason = $(this).data('reason');
+
+            $('#approve-request-id').val(requestId);
+            $('#approve-request-name').text(requestName);
+            $('#approve-request-email').text(requestEmail);
+            $('#approve-request-reason').text(requestReason);
+            $('#approve-password').val('');
+            $('#approve-role').val('Team Member');
+            $('#approve-team').val('');
+            $('#approve-form-error').hide();
+
+            const modalEl = document.getElementById('approve-account-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        // Event handler: Approve Account form submit
+        $(document).off('submit', '#approve-account-form').on('submit', '#approve-account-form', async function(e) {
+            e.preventDefault();
+
+            const requestId = $('#approve-request-id').val();
+            const email = $('#approve-request-email').text();
+            const name = $('#approve-request-name').text();
+            const password = $('#approve-password').val();
+            const role = $('#approve-role').val();
+            const team = $('#approve-team').val().trim();
+
+            // Try to sign up the user (this will create them in Supabase Auth)
+            const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: email,
+                password: password,
+                options: {
+                    data: {
+                        full_name: name
+                    }
+                }
+            });
+
+            if (authError) {
+                $('#approve-form-error').text('Error creating user: ' + authError.message).show();
+                return;
+            }
+
+            if (!authData.user) {
+                $('#approve-form-error').text('Error: User was not created. Please try again.').show();
+                return;
+            }
+
+            // Create profile for the user
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert([{
+                    id: authData.user.id,
+                    full_name: name,
+                    role: role,
+                    team: team || null,
+                    account_request_id: requestId
+                }]);
+
+            if (profileError) {
+                $('#approve-form-error').text('Error creating profile: ' + profileError.message).show();
+                return;
+            }
+
+            // Update account request status
+            const { data: sessionData } = await supabase.auth.getSession();
+            const currentUserId = sessionData.session ? sessionData.session.user.id : null;
+            
+            const { error: updateError } = await supabase
+                .from('account_requests')
+                .update({ 
+                    status: 'approved',
+                    approved_by: currentUserId,
+                    approved_at: new Date().toISOString()
+                })
+                .eq('id', requestId);
+
+            if (updateError) {
+                console.error('Error updating request status:', updateError);
+            }
+
+            const modalEl = document.getElementById('approve-account-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+
+            alert('Account approved and user created successfully!');
+            load(); // Reload data
+        });
+
+        // Event handler: Reject Request button
+        $(document).off('click', '.reject-request-btn').on('click', '.reject-request-btn', async function() {
+            const requestId = $(this).data('id');
+            
+            if (!confirm('Are you sure you want to reject this account request?')) {
+                return;
+            }
+
+            const { error } = await supabase
+                .from('account_requests')
+                .update({ status: 'rejected' })
+                .eq('id', requestId);
+
+            if (error) {
+                alert('Error rejecting request: ' + error.message);
+                return;
+            }
+
+            alert('Account request rejected.');
+            load(); // Reload data
+        });
+
+        // Event handler: Toggle Disable/Enable User button
+        $(document).off('click', '.toggle-disable-btn').on('click', '.toggle-disable-btn', async function() {
+            const userId = $(this).data('id');
+            const userName = $(this).data('name');
+            const isCurrentlyDisabled = $(this).data('disabled') === true || $(this).data('disabled') === 'true';
+            const newDisabledState = !isCurrentlyDisabled;
+            const action = newDisabledState ? 'disable' : 'enable';
+            
+            if (!confirm(`Are you sure you want to ${action} user "${userName}"?`)) {
+                return;
+            }
+
+            // Note: Supabase doesn't allow disabling users from client SDK
+            // We'll mark them as disabled in the profile instead
+            const { error } = await supabase
+                .from('profiles')
+                .update({ disabled: newDisabledState })
+                .eq('id', userId);
+
+            if (error) {
+                alert(`Error ${action}ing user: ` + error.message);
+                return;
+            }
+
+            alert(`User ${action}d successfully.${newDisabledState ? ' Note: To fully prevent login, you should also delete the user from Supabase Dashboard > Authentication > Users.' : ''}`);
+            load(); // Reload data
+        });
+
+        // Event handler: Delete User button
+        $(document).off('click', '.delete-user-btn').on('click', '.delete-user-btn', async function() {
+            const userId = $(this).data('id');
+            const userName = $(this).data('name');
+            
+            if (!confirm(`Are you sure you want to DELETE user "${userName}"? This action cannot be undone!`)) {
+                return;
+            }
+
+            // Double confirmation for delete
+            if (!confirm('This will permanently delete the user and all their data. Are you absolutely sure?')) {
+                return;
+            }
+
+            // First delete the profile
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', userId);
+
+            if (profileError) {
+                alert('Error deleting user profile: ' + profileError.message);
+                return;
+            }
+
+            // Note: We cannot delete from auth.users via client SDK
+            // The admin must delete from Supabase Dashboard: Authentication -> Users
+            alert('User profile deleted successfully. IMPORTANT: You must also delete this user from Supabase Dashboard > Authentication > Users to complete the deletion.');
+            load(); // Reload data
+        });
+
+        load();
+    }
+
     // --- AUTHENTICATION ---
     async function checkSession() {
         const { data } = await supabase.auth.getSession();
@@ -820,6 +1324,10 @@ $(document).ready(function() {
             
             if (profile && (profile.role === 'Team Lead' || profile.role === 'Admin')) {
                 nav.append('<li class="nav-item"><a href="#review" class="nav-link">Review Queue</a></li>');
+            }
+            
+            if (profile && profile.role === 'Admin') {
+                nav.append('<li class="nav-item"><a href="#admin" class="nav-link">Admin Panel</a></li>');
             }
         } else {
             $('#login-btn').show();

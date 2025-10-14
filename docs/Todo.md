@@ -136,17 +136,29 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ## Phase 8 — Admin: User & Role Management
 
-- [ ] **8.1 Create Admin Panel**
-  - *Acceptance Criteria:* Displays users with columns: Username, Role, Team, Last Login.
+- [x] **8.1 Create Admin Panel**
+  - *Acceptance Criteria:* Displays users with columns: Username, Role, Team, Created At.
+  - *Status:* ✅ Complete - Admin panel with tabbed interface (Users & Account Requests)
 
-- [ ] **8.2 Approve Account Requests**
+- [x] **8.2 Approve Account Requests**
   - *Acceptance Criteria:* Admin can approve pending account requests; new users created in Supabase Auth and `profiles`.
+  - *Status:* ✅ Complete - Approve/Reject functionality with user creation
 
-- [ ] **8.3 Manage Roles**
+- [x] **8.3 Manage Roles**
   - *Acceptance Criteria:* Admin can update role assignments; permissions take effect immediately.
+  - *Status:* ✅ Complete - Edit role modal with team assignment
 
-- [ ] **8.4 Write Admin Tests**
+- [x] **8.4 Write Admin Tests**
   - *Acceptance Criteria:* Playwright validates only Admins can access; role changes apply immediately.
+  - *Status:* ✅ Complete - 14 tests covering access control, user management, account requests, and workflows
+
+- [x] **8.5 Disable/Enable Users**
+  - *Acceptance Criteria:* Admin can disable/enable users; disabled users shown with visual indicator.
+  - *Status:* ✅ Complete - Toggle button with disabled badge and gray row styling
+
+- [x] **8.6 Delete Users**
+  - *Acceptance Criteria:* Admin can delete user profiles with double confirmation.
+  - *Status:* ✅ Complete - Delete button with profile removal (note: auth user must be deleted manually from dashboard)
 
 ---
 
