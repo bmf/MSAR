@@ -1457,6 +1457,15 @@ $(document).ready(function() {
         const container = `
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <h2 class="mb-0">Review Queue</h2>
+                <div>
+                    <label for="status-filter" class="form-label me-2">Filter:</label>
+                    <select id="status-filter" class="form-select form-select-sm" style="width: auto; display: inline-block;">
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="all">All</option>
+                    </select>
+                </div>
             </div>
             <div class="table-responsive">
                 <table class="table table-striped align-middle" id="review-table">
@@ -1468,6 +1477,7 @@ $(document).ready(function() {
                             <th>All Assignees</th>
                             <th>Submitted At</th>
                             <th>% Complete</th>
+                            <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -1526,7 +1536,7 @@ $(document).ready(function() {
 
         $('#main-content').html(container);
 
-        const state = { submissions: [] };
+        const state = { submissions: [], currentFilter: 'pending' };
 
         function escapeHtml(s) {
             return String(s)
@@ -1543,7 +1553,16 @@ $(document).ready(function() {
             return isNaN(dt.getTime()) ? '' : dt.toLocaleString();
         }
 
-        async function fetchPendingSubmissions() {
+        function getStatusBadge(status) {
+            const badges = {
+                'pending': '<span class="badge rounded-pill" style="background-color: #ffc107; color: #000;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #ff9800; margin-right: 6px;"></span>Pending</span>',
+                'approved': '<span class="badge rounded-pill" style="background-color: #28a745; color: #fff;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #20c997; margin-right: 6px;"></span>Approved</span>',
+                'rejected': '<span class="badge rounded-pill" style="background-color: #dc3545; color: #fff;"><span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #ff6b6b; margin-right: 6px;"></span>Rejected</span>'
+            };
+            return badges[status] || '<span class="badge rounded-pill bg-secondary">Unknown</span>';
+        }
+
+        async function fetchSubmissions(statusFilter = 'pending') {
             const { data: sessionData } = await supabase.auth.getSession();
             const user = sessionData.session ? sessionData.session.user : null;
             if (!user) return [];
@@ -1573,21 +1592,20 @@ $(document).ready(function() {
             // Get all team members from these teams
             const { data: teamMemberships } = await supabase
                 .from('team_memberships')
-                .select(`
-                    user_id,
-                    profiles:user_id (
-                        id,
-                        full_name
-                    )
-                `)
+                .select('user_id')
                 .in('team_id', teamIds);
 
             if (!teamMemberships || teamMemberships.length === 0) return [];
 
-            const teamMembers = teamMemberships.map(tm => ({
-                id: tm.profiles.id,
-                full_name: tm.profiles.full_name
-            }));
+            const memberUserIds = teamMemberships.map(tm => tm.user_id);
+            
+            // Get profiles for team members
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', memberUserIds);
+
+            const teamMembers = profiles || [];
 
             const teamMemberIds = teamMembers.map(m => m.id);
             const teamMemberMap = {};
@@ -1595,13 +1613,17 @@ $(document).ready(function() {
                 teamMemberMap[m.id] = m.full_name;
             });
 
-            // Get pending task statuses from team members
-            const { data: statuses, error } = await supabase
+            // Get task statuses from team members based on filter
+            let query = supabase
                 .from('task_statuses')
-                .select('id, task_id, submitted_by, narrative, percent_complete, blockers, submitted_at, report_month')
-                .eq('lead_review_status', 'pending')
-                .in('submitted_by', teamMemberIds)
-                .order('submitted_at', { ascending: false });
+                .select('id, task_id, submitted_by, narrative, percent_complete, blockers, submitted_at, report_month, lead_review_status, lead_review_comment, lead_reviewed_at')
+                .in('submitted_by', teamMemberIds);
+            
+            if (statusFilter !== 'all') {
+                query = query.eq('lead_review_status', statusFilter);
+            }
+            
+            const { data: statuses, error } = await query.order('submitted_at', { ascending: false });
 
             if (error) {
                 console.error('Error fetching submissions:', error);
@@ -1684,11 +1706,15 @@ $(document).ready(function() {
             const tbody = $('#review-table tbody');
             tbody.empty();
             if (!state.submissions.length) {
-                tbody.append('<tr><td colspan="7" class="text-muted">No pending submissions.</td></tr>');
+                tbody.append('<tr><td colspan="8" class="text-muted">No submissions found.</td></tr>');
                 return;
             }
             for (const s of state.submissions) {
                 const multiAssigneeBadge = s.is_multi_assignee ? `<span class="badge bg-info ms-1" title="${s.assignee_count} assignees">${s.assignee_count}</span>` : '';
+                const statusBadge = getStatusBadge(s.lead_review_status || 'pending');
+                const reviewButton = s.lead_review_status === 'pending' 
+                    ? `<button class="btn btn-sm btn-primary review-btn" data-id="${s.id}">Review</button>`
+                    : `<button class="btn btn-sm btn-secondary review-btn" data-id="${s.id}">View</button>`;
                 const tr = `
                     <tr>
                         <td>${escapeHtml(s.task_name)}</td>
@@ -1697,7 +1723,8 @@ $(document).ready(function() {
                         <td>${escapeHtml(s.all_assignees)}${multiAssigneeBadge}</td>
                         <td>${formatDateTime(s.submitted_at)}</td>
                         <td>${s.percent_complete != null ? s.percent_complete + '%' : ''}</td>
-                        <td><button class="btn btn-sm btn-primary review-btn" data-id="${s.id}">Review</button></td>
+                        <td>${statusBadge}</td>
+                        <td>${reviewButton}</td>
                     </tr>
                 `;
                 tbody.append(tr);
@@ -1705,7 +1732,7 @@ $(document).ready(function() {
         }
 
         async function load() {
-            const submissions = await fetchPendingSubmissions();
+            const submissions = await fetchSubmissions(state.currentFilter);
             state.submissions = submissions;
             renderTable();
         }
@@ -1867,6 +1894,9 @@ $(document).ready(function() {
             if (success) {
                 closeModal();
                 alert('Submission approved successfully!');
+                // Switch to "All" view to show the status change
+                state.currentFilter = 'all';
+                $('#status-filter').val('all');
                 load();
             }
         });
@@ -1876,6 +1906,9 @@ $(document).ready(function() {
             if (success) {
                 closeModal();
                 alert('Submission approved with changes!');
+                // Switch to "All" view to show the status change
+                state.currentFilter = 'all';
+                $('#status-filter').val('all');
                 load();
             }
         });
@@ -1890,8 +1923,16 @@ $(document).ready(function() {
             if (success) {
                 closeModal();
                 alert('Submission rejected.');
+                // Switch to "All" view to show the status change
+                state.currentFilter = 'all';
+                $('#status-filter').val('all');
                 load();
             }
+        });
+
+        $(document).off('change', '#status-filter').on('change', '#status-filter', function() {
+            state.currentFilter = $(this).val();
+            load();
         });
 
         load();

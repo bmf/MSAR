@@ -159,9 +159,9 @@ Each task includes a checkbox and clear acceptance criteria.
   - *Acceptance Criteria:* On Approve, a row is added to `report_queue` for (contract_id, report_month, task_status_id). Unique constraint prevents duplicates; rejection requires comment.
   - *Status:* ✅ Complete - Implemented in Phase 5, auto-queue working, rejection validation enforced
 
-- [ ] **6.6 Edit Policy Toggle (Optional)**
+- [x] **6.6 Edit Policy Toggle (Optional)**
   - *Acceptance Criteria:* Feature flag controls whether leads can edit narratives prior to approval. If disabled, only Approve/Reject with comment allowed.
-  - *Status:* ⏭️ Deferred - Optional feature, can be added later if needed
+  - *Status:* ❌ Not Needed - Current "Approve with Changes" functionality is sufficient
 
 ## Phase 7 — Report Approver & Export
 
