@@ -161,38 +161,38 @@ Each task includes a checkbox and clear acceptance criteria.
 
 - [x] **6.6 Edit Policy Toggle (Optional)**
   - *Acceptance Criteria:* Feature flag controls whether leads can edit narratives prior to approval. If disabled, only Approve/Reject with comment allowed.
-  - *Status:* ❌ Not Needed - Current "Approve with Changes" functionality is sufficient
+  - *Status:* Not Needed - Current "Approve with Changes" functionality is sufficient
 
 ## Phase 7 — Report Approver & Export
 
-- [ ] **7.1 Create Approver View**
+- [x] **7.1 Create Approver View**
   - *Acceptance Criteria:* Displays list of items approved by team leads awaiting finalization.
 
-- [ ] **7.2 Implement “Finalize & Export” Workflow**
+- [x] **7.2 Implement "Finalize & Export" Workflow**
   - *Acceptance Criteria:* Aggregates approved updates into printable HTML; includes report date and section headers.
 
-- [ ] **7.3 Add PDF Export Option**
+- [x] **7.3 Add PDF Export Option**
   - *Acceptance Criteria:* Users can export report to PDF; result matches on-screen data.
 
-- [ ] **7.4 Write Export Tests**
+- [x] **7.4 Write Export Tests**
   - *Acceptance Criteria:* Playwright verifies report accuracy and successful PDF download initiation.
 
 ---
 
-- [ ] **7.5 PM/APM Review States**
+- [x] **7.5 PM/APM Review States**
   - *Acceptance Criteria:* Approver view supports **Approve**, **Approve with Changes**, and **Reject** with required comments for rejection. State saved to `monthly_reports.pm_review_status` and audit fields.
 
-- [ ] **7.6 Generate and Store PDF**
+- [x] **7.6 Generate and Store PDF**
   - *Acceptance Criteria:* Finalized report renders grouped by PWS line item with task narratives, % complete, blockers. PDF saved to Supabase Storage; `pdf_storage_path` updated; download link uses signed URL.
 
-- [ ] **7.7 Month/Contract Locking**
-  - *Acceptance Criteria:* After PDF generation, subsequent edits for that month require PM/APM to “Re-open” report; UI indicates lock state.
+- [x] **7.7 Month/Contract Locking**
+  - *Acceptance Criteria:* After PDF generation, subsequent edits for that month require PM/APM to "Re-open" report; UI indicates lock state.
 
 ## Phase 8 — Admin: User & Role Management
 
 - [x] **8.1 Create Admin Panel**
   - *Acceptance Criteria:* Displays users with columns: Username, Role, Team, Created At.
-  - *Status:* ✅ Complete - Admin panel with tabbed interface (Users & Account Requests)
+  - *Status:* Complete - Admin panel with tabbed interface (Users & Account Requests)
 
 - [x] **8.2 Approve Account Requests**
   - *Acceptance Criteria:* Admin can approve pending account requests; new users created in Supabase Auth and `profiles`.
