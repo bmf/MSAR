@@ -158,6 +158,12 @@ $(document).ready(function() {
                 <button id="new-update-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#new-update-modal">Create New Task Update</button>
             </div>
             
+            <!-- Lock Status Alert -->
+            <div id="lock-status-alert" class="alert alert-warning d-none" role="alert">
+                <i class="bi bi-lock-fill"></i> <strong>Reporting Period Locked:</strong> 
+                <span id="lock-status-message"></span>
+            </div>
+            
             <!-- Global Filters -->
             <div class="card mb-3">
                 <div class="card-body">
@@ -401,6 +407,42 @@ $(document).ready(function() {
                 .replace(/'/g, '&#039;');
         }
 
+        async function checkLockedReports() {
+            // Check if any contracts have locked reports for current month
+            const now = new Date();
+            const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+            
+            const { data: lockedReports, error } = await supabase
+                .from('monthly_reports')
+                .select(`
+                    id,
+                    contract_id,
+                    pm_review_status,
+                    contracts (
+                        name
+                    )
+                `)
+                .eq('report_month', currentMonth)
+                .in('pm_review_status', ['approved', 'approved-with-changes']);
+            
+            if (error) {
+                console.error('Error checking locked reports:', error);
+                return;
+            }
+            
+            if (lockedReports && lockedReports.length > 0) {
+                const contractNames = lockedReports.map(r => r.contracts.name).join(', ');
+                $('#lock-status-message').text(`The following contracts have finalized reports for this month: ${contractNames}. Contact your PM/APM to re-open if changes are needed.`);
+                $('#lock-status-alert').removeClass('d-none');
+                
+                // Disable the create update button
+                $('#new-update-btn').prop('disabled', true).attr('title', 'Reporting period is locked');
+            } else {
+                $('#lock-status-alert').addClass('d-none');
+                $('#new-update-btn').prop('disabled', false).removeAttr('title');
+            }
+        }
+
         async function fetchTasksAndUpdates() {
             const { data: sessionData } = await supabase.auth.getSession();
             const user = sessionData.session ? sessionData.session.user : null;
@@ -489,6 +531,7 @@ $(document).ready(function() {
 
         async function load() {
             readPrefs();
+            await checkLockedReports(); // Check for locked reports first
             const rows = await fetchTasksAndUpdates();
             state.raw = rows;
             await populateGlobalFilters(rows);
@@ -690,6 +733,29 @@ $(document).ready(function() {
             // Get current report month (first day of current month)
             const now = new Date();
             const reportMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            
+            // Check if report is locked (approved or approved-with-changes)
+            // First get the contract_id for this task
+            const { data: taskData } = await supabase
+                .from('tasks')
+                .select('pws_line_items(contract_id)')
+                .eq('id', taskId)
+                .single();
+            
+            if (taskData && taskData.pws_line_items) {
+                const { data: lockedReport } = await supabase
+                    .from('monthly_reports')
+                    .select('id, pm_review_status')
+                    .eq('contract_id', taskData.pws_line_items.contract_id)
+                    .eq('report_month', reportMonth)
+                    .in('pm_review_status', ['approved', 'approved-with-changes'])
+                    .maybeSingle();
+                
+                if (lockedReport) {
+                    $('#update-form-error').text('This reporting period has been finalized and is locked. No further submissions are allowed.').show();
+                    return false;
+                }
+            }
             
             // Check if user can submit for this task/month (no pending/approved submission exists)
             const { data: existingStatus } = await supabase
@@ -1438,18 +1504,767 @@ $(document).ready(function() {
     }
 
     // --- REPORTING VIEW (PM/APM) ---
-    function initializeReportingView() {
+    async function initializeReportingView() {
         // PM/APM sees monthly reports for their contracts
         const container = `
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <h2 class="mb-0">Monthly Reporting</h2>
+                <button class="btn btn-primary" id="create-report-btn">
+                    <i class="bi bi-plus-circle"></i> Create New Report
+                </button>
             </div>
             <p class="text-muted">Review and approve monthly reports for your contracts.</p>
-            <div class="alert alert-info">
-                <strong>Note:</strong> PM/APM reporting dashboard will be implemented in Phase 7.
+            
+            <!-- Filters -->
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="report-contract-filter" class="form-label">Contract</label>
+                    <select id="report-contract-filter" class="form-select">
+                        <option value="">All Contracts</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="report-month-filter" class="form-label">Report Month</label>
+                    <input type="month" id="report-month-filter" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label for="report-status-filter" class="form-label">Status</label>
+                    <select id="report-status-filter" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="approved-with-changes">Approved with Changes</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Reports Table -->
+            <div class="table-responsive">
+                <table class="table table-striped align-middle" id="reports-table">
+                    <thead>
+                        <tr>
+                            <th>Contract</th>
+                            <th>Report Month</th>
+                            <th>Items in Queue</th>
+                            <th>Status</th>
+                            <th>Reviewed By</th>
+                            <th>Reviewed At</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Create Report Modal -->
+            <div class="modal fade" id="reporting-create-modal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Create New Report</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="mb-3">
+                                <label for="new-report-contract" class="form-label">Contract</label>
+                                <select id="new-report-contract" class="form-select" required>
+                                    <option value="">Select Contract</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="new-report-month" class="form-label">Report Month</label>
+                                <input type="month" id="new-report-month" class="form-control" required>
+                            </div>
+                            <div class="alert alert-info">
+                                <small>This will create a new monthly report for review. Items in the report queue for this contract and month will be included.</small>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-primary" id="save-new-report-btn">Create Report</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Review Report Modal -->
+            <div class="modal fade" id="reporting-review-modal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Review Monthly Report</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body" id="review-report-content">
+                            <!-- Report content will be loaded here -->
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                            <button type="button" class="btn btn-success" id="approve-report-btn">Approve</button>
+                            <button type="button" class="btn btn-warning" id="approve-with-changes-btn">Approve with Changes</button>
+                            <button type="button" class="btn btn-danger" id="reject-report-btn">Reject</button>
+                            <button type="button" class="btn btn-primary" id="export-pdf-btn">Export PDF</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
+        
         $('#main-content').html(container);
+        
+        // Load contracts for filters
+        await loadReportContracts();
+        
+        // Set default month to current month
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        $('#report-month-filter').val(currentMonth);
+        $('#new-report-month').val(currentMonth);
+        
+        // Load reports
+        await loadReports();
+        
+        // Event handlers
+        $('#create-report-btn').on('click', openCreateReportModal);
+        $('#save-new-report-btn').on('click', createNewReport);
+        $('#report-contract-filter, #report-month-filter, #report-status-filter').on('change', loadReports);
+        $('#approve-report-btn').on('click', () => reviewReport('approved'));
+        $('#approve-with-changes-btn').on('click', () => reviewReport('approved-with-changes'));
+        $('#reject-report-btn').on('click', () => reviewReport('rejected'));
+        $('#export-pdf-btn').on('click', exportReportToPDF);
+    }
+
+    async function loadReportContracts() {
+        try {
+            // Get contracts for PM/APM user
+            const { data: userContracts, error } = await supabase
+                .from('user_contract_roles')
+                .select('contract_id, contracts(id, name, code)')
+                .eq('user_id', currentUser.id)
+                .in('role', ['PM', 'APM']);
+            
+            if (error) throw error;
+            
+            const contracts = userContracts.map(uc => uc.contracts);
+            
+            // Populate contract filters
+            const contractSelect = $('#report-contract-filter, #new-report-contract');
+            contracts.forEach(contract => {
+                contractSelect.append(`<option value="${contract.id}">${escapeHtml(contract.name)} (${escapeHtml(contract.code)})</option>`);
+            });
+        } catch (error) {
+            console.error('Error loading contracts:', error);
+            alert('Error loading contracts: ' + error.message);
+        }
+    }
+
+    async function loadReports() {
+        try {
+            const contractFilter = $('#report-contract-filter').val();
+            const monthFilter = $('#report-month-filter').val();
+            const statusFilter = $('#report-status-filter').val();
+            
+            // Build query - don't join profiles here since pm_reviewer is FK to auth.users
+            let query = supabase
+                .from('monthly_reports')
+                .select(`
+                    *,
+                    contracts(name, code)
+                `)
+                .order('report_month', { ascending: false });
+            
+            if (contractFilter) {
+                query = query.eq('contract_id', contractFilter);
+            }
+            
+            if (monthFilter) {
+                const monthDate = monthFilter + '-01';
+                query = query.eq('report_month', monthDate);
+            }
+            
+            if (statusFilter) {
+                query = query.eq('pm_review_status', statusFilter);
+            }
+            
+            const { data: reports, error } = await query;
+            
+            if (error) throw error;
+            
+            // Get queue counts and reviewer names for each report
+            const reportsWithCounts = await Promise.all(reports.map(async (report) => {
+                const { count, error: countError } = await supabase
+                    .from('report_queue')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('contract_id', report.contract_id)
+                    .eq('report_month', report.report_month);
+                
+                // Get reviewer name from profiles if pm_reviewer exists
+                let reviewerName = null;
+                if (report.pm_reviewer) {
+                    const { data: profileData } = await supabase
+                        .from('profiles')
+                        .select('full_name')
+                        .eq('id', report.pm_reviewer)
+                        .single();
+                    reviewerName = profileData?.full_name;
+                }
+                
+                return {
+                    ...report,
+                    queueCount: countError ? 0 : count,
+                    reviewerName: reviewerName
+                };
+            }));
+            
+            displayReports(reportsWithCounts);
+        } catch (error) {
+            console.error('Error loading reports:', error);
+            alert('Error loading reports: ' + error.message);
+        }
+    }
+
+    function displayReports(reports) {
+        const tbody = $('#reports-table tbody');
+        tbody.empty();
+        
+        if (reports.length === 0) {
+            tbody.append('<tr><td colspan="7" class="text-center text-muted">No reports found</td></tr>');
+            return;
+        }
+        
+        reports.forEach(report => {
+            const statusBadge = getStatusBadge(report.pm_review_status);
+            const reviewedBy = report.reviewerName ? escapeHtml(report.reviewerName) : '-';
+            const reviewedAt = report.pm_reviewed_at ? new Date(report.pm_reviewed_at).toLocaleString() : '-';
+            const reportMonth = new Date(report.report_month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            
+            const row = `
+                <tr>
+                    <td>${escapeHtml(report.contracts.name)}</td>
+                    <td>${reportMonth}</td>
+                    <td><span class="badge bg-info">${report.queueCount} items</span></td>
+                    <td>${statusBadge}</td>
+                    <td>${reviewedBy}</td>
+                    <td>${reviewedAt}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary view-report-btn" data-report-id="${report.id}">
+                            View/Review
+                        </button>
+                        ${report.pm_review_status === 'approved' || report.pm_review_status === 'approved-with-changes' ? 
+                            `<button class="btn btn-sm btn-success export-report-btn" data-report-id="${report.id}">
+                                <i class="bi bi-file-pdf"></i> Export PDF
+                            </button>
+                            <button class="btn btn-sm btn-warning reopen-report-btn" data-report-id="${report.id}" title="Re-open report for edits">
+                                <i class="bi bi-unlock"></i> Re-open
+                            </button>` : ''}
+                    </td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+        
+        // Attach event handlers
+        $('.view-report-btn').on('click', function() {
+            const reportId = $(this).data('report-id');
+            openReviewReportModal(reportId);
+        });
+        
+        $('.export-report-btn').on('click', function() {
+            const reportId = $(this).data('report-id');
+            exportReportToPDF(reportId);
+        });
+        
+        $('.reopen-report-btn').on('click', function() {
+            const reportId = $(this).data('report-id');
+            reopenReport(reportId);
+        });
+    }
+
+    function getStatusBadge(status) {
+        const badges = {
+            'pending': '<span class="badge bg-warning">Pending</span>',
+            'approved': '<span class="badge bg-success">Approved</span>',
+            'approved-with-changes': '<span class="badge bg-info">Approved with Changes</span>',
+            'rejected': '<span class="badge bg-danger">Rejected</span>'
+        };
+        return badges[status] || '<span class="badge bg-secondary">Unknown</span>';
+    }
+
+    function openCreateReportModal() {
+        const modalEl = document.getElementById('reporting-create-modal');
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    async function createNewReport() {
+        try {
+            const contractId = $('#new-report-contract').val();
+            const reportMonth = $('#new-report-month').val();
+            
+            if (!contractId || !reportMonth) {
+                alert('Please select both contract and report month');
+                return;
+            }
+            
+            const reportMonthDate = reportMonth + '-01';
+            
+            // Check if report already exists
+            const { data: existing, error: checkError } = await supabase
+                .from('monthly_reports')
+                .select('id')
+                .eq('contract_id', contractId)
+                .eq('report_month', reportMonthDate)
+                .single();
+            
+            if (existing) {
+                alert('A report for this contract and month already exists');
+                return;
+            }
+            
+            // Create new report
+            const { data: newReport, error } = await supabase
+                .from('monthly_reports')
+                .insert([{
+                    contract_id: contractId,
+                    report_month: reportMonthDate,
+                    pm_review_status: 'pending'
+                }])
+                .select()
+                .single();
+            
+            if (error) throw error;
+            
+            const modalEl = document.getElementById('reporting-create-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            await loadReports();
+            alert('Report created successfully');
+        } catch (error) {
+            console.error('Error creating report:', error);
+            alert('Error creating report: ' + error.message);
+        }
+    }
+
+    let currentReportId = null;
+    
+    async function openReviewReportModal(reportId) {
+        try {
+            currentReportId = reportId;
+            
+            // Get report details
+            const { data: report, error: reportError } = await supabase
+                .from('monthly_reports')
+                .select(`
+                    *,
+                    contracts(name, code)
+                `)
+                .eq('id', reportId)
+                .single();
+            
+            if (reportError) throw reportError;
+            
+            // Get queue items for this report
+            const { data: queueItems, error: queueError } = await supabase
+                .from('report_queue')
+                .select(`
+                    *,
+                    task_statuses(
+                        *,
+                        tasks(
+                            title,
+                            pws_line_items(code, title)
+                        )
+                    )
+                `)
+                .eq('contract_id', report.contract_id)
+                .eq('report_month', report.report_month);
+            
+            if (queueError) throw queueError;
+            
+            // Get submitter names for all task statuses
+            const submitterIds = [...new Set(queueItems.map(item => item.task_statuses.submitted_by))];
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', submitterIds);
+            
+            const profileMap = {};
+            if (profiles) {
+                profiles.forEach(p => {
+                    profileMap[p.id] = p.full_name;
+                });
+            }
+            
+            // Group by PWS line item
+            const groupedItems = {};
+            queueItems.forEach(item => {
+                const ts = item.task_statuses;
+                const pwsCode = ts.tasks.pws_line_items.code;
+                const pwsTitle = ts.tasks.pws_line_items.title;
+                const key = `${pwsCode}|${pwsTitle}`;
+                
+                if (!groupedItems[key]) {
+                    groupedItems[key] = {
+                        code: pwsCode,
+                        title: pwsTitle,
+                        items: []
+                    };
+                }
+                
+                groupedItems[key].items.push({
+                    taskTitle: ts.tasks.title,
+                    submittedBy: profileMap[ts.submitted_by] || 'Unknown',
+                    narrative: ts.narrative,
+                    percentComplete: ts.percent_complete,
+                    blockers: ts.blockers,
+                    submittedAt: ts.submitted_at
+                });
+            });
+            
+            // Build report HTML
+            const reportMonth = new Date(report.report_month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            let reportHtml = `
+                <div class="report-preview" id="report-preview-content">
+                    <h3 class="text-center mb-4">Monthly Status Report</h3>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Contract:</strong> ${escapeHtml(report.contracts.name)} (${escapeHtml(report.contracts.code)})
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Report Month:</strong> ${reportMonth}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Status:</strong> ${getStatusBadge(report.pm_review_status)}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Total Items:</strong> ${queueItems.length}
+                        </div>
+                    </div>
+                    
+                    ${report.pm_review_comment ? `
+                        <div class="alert alert-info mb-3">
+                            <strong>Review Comment:</strong> ${escapeHtml(report.pm_review_comment)}
+                        </div>
+                    ` : ''}
+                    
+                    <hr class="my-4">
+            `;
+            
+            // Add grouped items
+            Object.values(groupedItems).forEach(group => {
+                reportHtml += `
+                    <div class="pws-section mb-4">
+                        <h5 class="bg-light p-2">${escapeHtml(group.code)} - ${escapeHtml(group.title)}</h5>
+                `;
+                
+                group.items.forEach(item => {
+                    reportHtml += `
+                        <div class="task-item mb-3 ps-3">
+                            <h6>${escapeHtml(item.taskTitle)}</h6>
+                            <p><strong>Submitted by:</strong> ${escapeHtml(item.submittedBy)} on ${new Date(item.submittedAt).toLocaleDateString()}</p>
+                            <p><strong>Progress:</strong> ${item.percentComplete}% complete</p>
+                            <p><strong>Status Update:</strong></p>
+                            <p class="ms-3">${escapeHtml(item.narrative || 'No narrative provided')}</p>
+                            ${item.blockers ? `
+                                <p><strong>Blockers:</strong></p>
+                                <p class="ms-3 text-danger">${escapeHtml(item.blockers)}</p>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                reportHtml += `</div>`;
+            });
+            
+            reportHtml += `</div>`;
+            
+            // Add comment section if pending
+            if (report.pm_review_status === 'pending') {
+                reportHtml += `
+                    <div class="mt-4">
+                        <label for="pm-review-comment" class="form-label">Review Comment (required for rejection)</label>
+                        <textarea class="form-control" id="pm-review-comment" rows="3"></textarea>
+                    </div>
+                `;
+            }
+            
+            $('#review-report-content').html(reportHtml);
+            
+            // Show/hide buttons based on status
+            if (report.pm_review_status === 'pending') {
+                $('#approve-report-btn, #approve-with-changes-btn, #reject-report-btn').show();
+                $('#export-pdf-btn').hide();
+            } else {
+                $('#approve-report-btn, #approve-with-changes-btn, #reject-report-btn').hide();
+                $('#export-pdf-btn').show();
+            }
+            
+            const modalEl = document.getElementById('reporting-review-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        } catch (error) {
+            console.error('Error loading report:', error);
+            alert('Error loading report: ' + error.message);
+        }
+    }
+
+    async function reviewReport(action) {
+        try {
+            const comment = $('#pm-review-comment').val();
+            
+            if (action === 'rejected' && !comment) {
+                alert('Comment is required when rejecting a report');
+                return;
+            }
+            
+            const updateData = {
+                pm_review_status: action,
+                pm_reviewer: currentUser.id,
+                pm_reviewed_at: new Date().toISOString(),
+                pm_review_comment: comment || null
+            };
+            
+            const { error } = await supabase
+                .from('monthly_reports')
+                .update(updateData)
+                .eq('id', currentReportId);
+            
+            if (error) throw error;
+            
+            $('#review-report-modal').modal('hide');
+            await loadReports();
+            alert(`Report ${action.replace('-', ' ')} successfully`);
+        } catch (error) {
+            console.error('Error reviewing report:', error);
+            alert('Error reviewing report: ' + error.message);
+        }
+    }
+
+    async function reopenReport(reportId) {
+        try {
+            if (!confirm('Are you sure you want to re-open this report? This will allow team members to submit new status updates for this reporting period.')) {
+                return;
+            }
+            
+            const { data: sessionData } = await supabase.auth.getSession();
+            const user = sessionData.session ? sessionData.session.user : null;
+            if (!user) {
+                alert('You must be logged in to re-open reports');
+                return;
+            }
+            
+            // Update report status back to pending
+            const { error } = await supabase
+                .from('monthly_reports')
+                .update({
+                    pm_review_status: 'pending',
+                    pm_reviewer: null,
+                    pm_reviewed_at: null,
+                    pm_review_comment: null
+                })
+                .eq('id', reportId);
+            
+            if (error) throw error;
+            
+            alert('Report has been re-opened successfully. Team members can now submit updates for this period.');
+            await loadReports(); // Reload the reports list
+        } catch (error) {
+            console.error('Error re-opening report:', error);
+            alert('Error re-opening report: ' + error.message);
+        }
+    }
+
+    async function exportReportToPDF(reportId) {
+        try {
+            // If reportId is an event object, get it from currentReportId
+            if (typeof reportId === 'object') {
+                reportId = currentReportId;
+            }
+            
+            if (!reportId) {
+                alert('No report selected for export');
+                return;
+            }
+            
+            // Get report details
+            const { data: report, error: reportError } = await supabase
+                .from('monthly_reports')
+                .select(`
+                    *,
+                    contracts(name, code)
+                `)
+                .eq('id', reportId)
+                .single();
+            
+            if (reportError) throw reportError;
+            
+            // Get queue items
+            const { data: queueItems, error: queueError } = await supabase
+                .from('report_queue')
+                .select(`
+                    *,
+                    task_statuses(
+                        *,
+                        tasks(
+                            title,
+                            pws_line_items(code, title)
+                        )
+                    )
+                `)
+                .eq('contract_id', report.contract_id)
+                .eq('report_month', report.report_month);
+            
+            if (queueError) throw queueError;
+            
+            // Get submitter names
+            const submitterIds = [...new Set(queueItems.map(item => item.task_statuses.submitted_by))];
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .in('id', submitterIds);
+            
+            const profileMap = {};
+            if (profiles) {
+                profiles.forEach(p => {
+                    profileMap[p.id] = p.full_name;
+                });
+            }
+            
+            // Generate PDF using jsPDF
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            let yPos = 20;
+            const pageHeight = doc.internal.pageSize.height;
+            const margin = 20;
+            const lineHeight = 7;
+            
+            // Helper function to add text with page break
+            function addText(text, x, y, options = {}) {
+                if (y > pageHeight - margin) {
+                    doc.addPage();
+                    return margin;
+                }
+                doc.text(text, x, y, options);
+                return y;
+            }
+            
+            // Title
+            doc.setFontSize(18);
+            doc.setFont(undefined, 'bold');
+            yPos = addText('Monthly Status Report', 105, yPos, { align: 'center' });
+            yPos += lineHeight * 2;
+            
+            // Header info
+            doc.setFontSize(12);
+            doc.setFont(undefined, 'normal');
+            const reportMonth = new Date(report.report_month).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+            yPos = addText(`Contract: ${report.contracts.name} (${report.contracts.code})`, margin, yPos);
+            yPos += lineHeight;
+            yPos = addText(`Report Month: ${reportMonth}`, margin, yPos);
+            yPos += lineHeight;
+            yPos = addText(`Status: ${report.pm_review_status}`, margin, yPos);
+            yPos += lineHeight;
+            yPos = addText(`Generated: ${new Date().toLocaleString()}`, margin, yPos);
+            yPos += lineHeight * 2;
+            
+            // Group by PWS line item
+            const groupedItems = {};
+            queueItems.forEach(item => {
+                const ts = item.task_statuses;
+                const pwsCode = ts.tasks.pws_line_items.code;
+                const pwsTitle = ts.tasks.pws_line_items.title;
+                const key = `${pwsCode}|${pwsTitle}`;
+                
+                if (!groupedItems[key]) {
+                    groupedItems[key] = {
+                        code: pwsCode,
+                        title: pwsTitle,
+                        items: []
+                    };
+                }
+                
+                groupedItems[key].items.push({
+                    taskTitle: ts.tasks.title,
+                    submittedBy: profileMap[ts.submitted_by] || 'Unknown',
+                    narrative: ts.narrative,
+                    percentComplete: ts.percent_complete,
+                    blockers: ts.blockers
+                });
+            });
+            
+            // Add grouped items
+            Object.values(groupedItems).forEach(group => {
+                if (yPos > pageHeight - margin - 40) {
+                    doc.addPage();
+                    yPos = margin;
+                }
+                
+                doc.setFontSize(14);
+                doc.setFont(undefined, 'bold');
+                yPos = addText(`${group.code} - ${group.title}`, margin, yPos);
+                yPos += lineHeight;
+                
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                
+                group.items.forEach(item => {
+                    if (yPos > pageHeight - margin - 30) {
+                        doc.addPage();
+                        yPos = margin;
+                    }
+                    
+                    doc.setFont(undefined, 'bold');
+                    yPos = addText(`  ${item.taskTitle}`, margin, yPos);
+                    yPos += lineHeight;
+                    
+                    doc.setFont(undefined, 'normal');
+                    yPos = addText(`    Submitted by: ${item.submittedBy}`, margin, yPos);
+                    yPos += lineHeight;
+                    yPos = addText(`    Progress: ${item.percentComplete}% complete`, margin, yPos);
+                    yPos += lineHeight;
+                    
+                    // Narrative (wrap text)
+                    const narrativeLines = doc.splitTextToSize(`    ${item.narrative || 'No narrative provided'}`, 170);
+                    narrativeLines.forEach(line => {
+                        if (yPos > pageHeight - margin) {
+                            doc.addPage();
+                            yPos = margin;
+                        }
+                        doc.text(line, margin, yPos);
+                        yPos += lineHeight;
+                    });
+                    
+                    if (item.blockers) {
+                        const blockerLines = doc.splitTextToSize(`    Blockers: ${item.blockers}`, 170);
+                        blockerLines.forEach(line => {
+                            if (yPos > pageHeight - margin) {
+                                doc.addPage();
+                                yPos = margin;
+                            }
+                            doc.text(line, margin, yPos);
+                            yPos += lineHeight;
+                        });
+                    }
+                    
+                    yPos += lineHeight;
+                });
+                
+                yPos += lineHeight;
+            });
+            
+            // Save PDF
+            const filename = `MSR_${report.contracts.code}_${report.report_month}.pdf`;
+            doc.save(filename);
+            
+            alert('PDF exported successfully');
+        } catch (error) {
+            console.error('Error exporting PDF:', error);
+            alert('Error exporting PDF: ' + error.message);
+        }
     }
 
     // --- REVIEW QUEUE ---
@@ -2442,8 +3257,40 @@ $(document).ready(function() {
 
     // --- AUTHENTICATION ---
     async function checkSession() {
-        const { data } = await supabase.auth.getSession();
-        currentUser = data.session ? data.session.user : null;
+        try {
+            const { data, error } = await supabase.auth.getSession();
+            
+            // If there's an error or no session, clear everything
+            if (error || !data.session) {
+                currentUser = null;
+                await updateUI();
+                router();
+                return;
+            }
+            
+            // Validate the session by trying to get the user
+            const { data: userData, error: userError } = await supabase.auth.getUser();
+            
+            if (userError || !userData.user) {
+                // Session is invalid, clear it
+                console.warn('Invalid session detected, clearing:', userError);
+                try {
+                    await supabase.auth.signOut();
+                } catch (e) {
+                    // Ignore signOut errors, just clear local state
+                    console.warn('SignOut failed during session validation:', e);
+                }
+                currentUser = null;
+            } else {
+                // Session is valid
+                currentUser = userData.user;
+            }
+        } catch (error) {
+            // Any error during session check, clear the session
+            console.error('Error checking session:', error);
+            currentUser = null;
+        }
+        
         await updateUI();
         router(); // Route after checking auth status
     }
@@ -2507,7 +3354,27 @@ $(document).ready(function() {
     });
 
     $(document).on('click', '#logout-btn', async function() {
-        await supabase.auth.signOut();
+        try {
+            // Try to sign out from Supabase
+            await supabase.auth.signOut();
+        } catch (error) {
+            // If server logout fails (403, network error, etc.), still clear local session
+            console.warn('Server logout failed, clearing local session:', error);
+            
+            // Forcefully clear Supabase session from localStorage
+            try {
+                const keys = Object.keys(localStorage);
+                keys.forEach(key => {
+                    if (key.startsWith('sb-') || key.includes('supabase')) {
+                        localStorage.removeItem(key);
+                    }
+                });
+            } catch (e) {
+                console.warn('Could not clear localStorage:', e);
+            }
+        }
+        
+        // Always clear local state regardless of server response
         currentUser = null;
         await updateUI();
         window.location.hash = ''; // Go to login page - hashchange event will trigger router
