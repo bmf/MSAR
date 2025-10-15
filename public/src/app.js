@@ -75,16 +75,64 @@ $(document).ready(function() {
     const dashboardPage = `<h2>Dashboard</h2><p>Welcome! Your assigned tasks will appear here.</p>`;
 
     // --- ROUTER ---
-    function router() {
+    async function router() {
         const hash = window.location.hash.substring(1);
         if (currentUser) {
+            // Get user profile to determine role
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', currentUser.id)
+                .single();
+            
+            if (profileError) {
+                console.error('Error fetching profile:', profileError);
+            }
+            
+            const userRole = profile ? profile.role : 'Team Member';
+            
+            // Route based on hash or default role-based landing
             if (hash === 'review') {
-                initializeReviewQueue();
+                if (userRole === 'Team Lead' || userRole === 'Admin') {
+                    initializeReviewQueue();
+                } else {
+                    $('#main-content').html('<div class="alert alert-danger">Access Denied: Team Lead or Admin privileges required.</div>');
+                }
             } else if (hash === 'admin') {
-                initializeAdminPanel();
+                if (userRole === 'Admin') {
+                    initializeAdminPanel();
+                } else {
+                    $('#main-content').html('<div class="alert alert-danger">Access Denied: Admin privileges required.</div>');
+                }
+            } else if (hash === 'reporting') {
+                if (userRole === 'Report Approver' || userRole === 'Admin') {
+                    initializeReportingView();
+                } else {
+                    $('#main-content').html('<div class="alert alert-danger">Access Denied: Report Approver or Admin privileges required.</div>');
+                }
+            } else if (hash === 'dashboard') {
+                // Dashboard shows tasks view for all roles
+                if (userRole === 'Admin') {
+                    // Admin sees all tasks across all contracts
+                    initializeAdminDashboard();
+                } else if (userRole === 'Team Lead') {
+                    initializeTeamLeadDashboard();
+                } else {
+                    initializeMemberDashboard();
+                }
+            } else if (hash === '') {
+                // Empty hash - route to role-based default landing
+                if (userRole === 'Admin') {
+                    initializeAdminPanel();
+                } else if (userRole === 'Report Approver') {
+                    initializeReportingView();
+                } else if (userRole === 'Team Lead') {
+                    initializeTeamLeadDashboard();
+                } else {
+                    initializeMemberDashboard();
+                }
             } else {
-                $('#main-content').html(dashboardPage);
-                initializeDashboard();
+                $('#main-content').html('<div class="alert alert-warning">Page not found.</div>');
             }
         } else {
             // If not logged in, show the login page
@@ -92,12 +140,47 @@ $(document).ready(function() {
         }
     }
 
-    function initializeDashboard() {
+    // --- MEMBER DASHBOARD (My Tasks) ---
+    function initializeMemberDashboard() {
         const container = `
             <div class="d-flex align-items-center justify-content-between mb-3">
-                <h2 class="mb-0">Dashboard</h2>
+                <h2 class="mb-0">My Tasks</h2>
                 <button id="new-update-btn" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#new-update-modal">Create New Task Update</button>
             </div>
+            
+            <!-- Global Filters -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Filters</h5>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-3">
+                            <label for="filter-contract" class="form-label">Contract</label>
+                            <select id="filter-contract" class="form-select">
+                                <option value="">All Contracts</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-team" class="form-label">Team</label>
+                            <select id="filter-team" class="form-select">
+                                <option value="">All Teams</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-pws" class="form-label">PWS Line Item</label>
+                            <select id="filter-pws" class="form-select">
+                                <option value="">All Line Items</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-task" class="form-label">Task</label>
+                            <select id="filter-task" class="form-select">
+                                <option value="">All Tasks</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="row g-2 mb-3">
                 <div class="col-12 col-md-4">
                     <label for="filter-status" class="form-label">Filter by Short Status</label>
@@ -188,32 +271,80 @@ $(document).ready(function() {
 
         $('#main-content').html(container);
 
-        const state = { raw: [], filtered: [], mapTasks: [] };
+        const state = { 
+            raw: [], 
+            filtered: [], 
+            contracts: [],
+            teams: [],
+            pwsLineItems: [],
+            tasks: [],
+            globalFilters: {
+                contract: '',
+                team: '',
+                pws: '',
+                task: ''
+            }
+        };
 
         function readPrefs() {
             const f = localStorage.getItem('msr_dash_filter') || '';
             const s = localStorage.getItem('msr_dash_sort') || 'due_date_asc';
+            const gf = localStorage.getItem('msr_global_filters');
+            
             $('#filter-status').val(f);
             $('#sort-by').val(s);
+            
+            if (gf) {
+                try {
+                    state.globalFilters = JSON.parse(gf);
+                    $('#filter-contract').val(state.globalFilters.contract || '');
+                    $('#filter-team').val(state.globalFilters.team || '');
+                    $('#filter-pws').val(state.globalFilters.pws || '');
+                    $('#filter-task').val(state.globalFilters.task || '');
+                } catch (e) {
+                    console.error('Error parsing global filters:', e);
+                }
+            }
+            
             return { f, s };
         }
 
         function writePrefs(f, s) {
             localStorage.setItem('msr_dash_filter', f);
             localStorage.setItem('msr_dash_sort', s);
+            localStorage.setItem('msr_global_filters', JSON.stringify(state.globalFilters));
         }
 
         function applyFilterSort() {
             const f = $('#filter-status').val();
             const s = $('#sort-by').val();
             let rows = [...state.raw];
+            
+            // Apply global filters
+            if (state.globalFilters.contract) {
+                rows = rows.filter(r => r.contract_id === state.globalFilters.contract);
+            }
+            if (state.globalFilters.team) {
+                rows = rows.filter(r => r.team_id === state.globalFilters.team);
+            }
+            if (state.globalFilters.pws) {
+                rows = rows.filter(r => r.pws_line_item_id === state.globalFilters.pws);
+            }
+            if (state.globalFilters.task) {
+                rows = rows.filter(r => r.task_id === state.globalFilters.task);
+            }
+            
+            // Apply status filter
             if (f) rows = rows.filter(r => (r.latest_update && r.latest_update.short_status) === f);
+            
+            // Sort
             rows.sort((a, b) => {
                 const da = a.due_date ? new Date(a.due_date).getTime() : 0;
                 const db = b.due_date ? new Date(b.due_date).getTime() : 0;
                 if (s === 'due_date_desc') return db - da;
                 return da - db;
             });
+            
             state.filtered = rows;
             renderTable();
             writePrefs(f, s);
@@ -264,43 +395,202 @@ $(document).ready(function() {
             const { data: sessionData } = await supabase.auth.getSession();
             const user = sessionData.session ? sessionData.session.user : null;
             if (!user) return [];
-            const { data: tasks, error: tasksError } = await supabase
-                .from('pws_tasks')
-                .select('id, task_name, pws_line_item, start_date, due_date, assigned_to')
-                .eq('assigned_to', user.id);
-            if (tasksError) return [];
-            const results = await Promise.all(tasks.map(async t => {
+            
+            // Fetch task assignments for current user
+            const { data: assignments, error: assignError } = await supabase
+                .from('task_assignments')
+                .select(`
+                    task_id,
+                    tasks (
+                        id,
+                        title,
+                        description,
+                        start_date,
+                        due_date,
+                        status_short,
+                        pws_line_item_id,
+                        pws_line_items (
+                            id,
+                            code,
+                            title,
+                            contract_id,
+                            contracts (
+                                id,
+                                name,
+                                code
+                            )
+                        )
+                    )
+                `)
+                .eq('user_id', user.id);
+            
+            if (assignError) {
+                console.error('Error fetching assignments:', assignError);
+                return [];
+            }
+            
+            if (!assignments || assignments.length === 0) return [];
+            
+            // Process each assignment
+            const results = await Promise.all(assignments.map(async a => {
+                const task = a.tasks;
+                if (!task) return null;
+                
+                const pwsLineItem = task.pws_line_items;
+                const contract = pwsLineItem ? pwsLineItem.contracts : null;
+                
+                // Fetch latest update for this task by current user
                 const { data: updates } = await supabase
                     .from('updates')
                     .select('id, narrative, percent_complete, blockers, short_status, created_at')
-                    .eq('task_id', t.id)
+                    .eq('task_id', task.id)
                     .eq('user_id', user.id)
                     .order('created_at', { ascending: false })
                     .limit(1);
+                
                 const latest = updates && updates.length ? updates[0] : null;
+                
                 return {
-                    ...t,
+                    task_id: task.id,
+                    task_name: task.title,
+                    description: task.description,
+                    start_date: task.start_date,
+                    due_date: task.due_date,
+                    status_short: task.status_short,
+                    pws_line_item_id: pwsLineItem ? pwsLineItem.id : null,
+                    pws_line_item: pwsLineItem ? `${pwsLineItem.code} - ${pwsLineItem.title}` : 'N/A',
+                    contract_id: contract ? contract.id : null,
+                    contract_name: contract ? contract.name : 'N/A',
+                    contract_code: contract ? contract.code : 'N/A',
+                    team_id: null, // Will be populated if needed
                     assigned_label: user.email || 'Me',
                     latest_update: latest
                 };
             }));
-            return results;
+            
+            return results.filter(r => r !== null);
         }
 
         async function load() {
             readPrefs();
             const rows = await fetchTasksAndUpdates();
             state.raw = rows;
+            await populateGlobalFilters(rows);
             populateTaskSelect(rows);
             updateModalState(rows);
             applyFilterSort();
+        }
+
+        async function populateGlobalFilters(rows) {
+            // Extract unique contracts
+            const contracts = [...new Set(rows.map(r => ({ id: r.contract_id, name: r.contract_name, code: r.contract_code })).filter(c => c.id))];
+            const uniqueContracts = contracts.filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i);
+            
+            const contractSelect = $('#filter-contract');
+            contractSelect.find('option:not(:first)').remove();
+            uniqueContracts.forEach(c => {
+                contractSelect.append(`<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`);
+            });
+            
+            // Restore saved filters and populate dependent dropdowns
+            if (state.globalFilters.contract) {
+                contractSelect.val(state.globalFilters.contract);
+                await updateTeamFilter();
+            }
+            if (state.globalFilters.team) {
+                $('#filter-team').val(state.globalFilters.team);
+                await updatePWSFilter();
+            }
+            if (state.globalFilters.pws) {
+                $('#filter-pws').val(state.globalFilters.pws);
+                await updateTaskFilter();
+            }
+            if (state.globalFilters.task) {
+                $('#filter-task').val(state.globalFilters.task);
+            }
+        }
+
+        async function updateTeamFilter() {
+            const contractId = $('#filter-contract').val();
+            const teamSelect = $('#filter-team');
+            teamSelect.find('option:not(:first)').remove();
+            teamSelect.val('');
+            
+            if (!contractId) {
+                $('#filter-pws').find('option:not(:first)').remove().end().val('');
+                $('#filter-task').find('option:not(:first)').remove().end().val('');
+                return;
+            }
+            
+            // Fetch teams for selected contract
+            const { data: teams } = await supabase
+                .from('teams')
+                .select('id, name')
+                .eq('contract_id', contractId)
+                .eq('is_active', true)
+                .order('name');
+            
+            if (teams) {
+                teams.forEach(t => {
+                    teamSelect.append(`<option value="${t.id}">${escapeHtml(t.name)}</option>`);
+                });
+            }
+        }
+
+        async function updatePWSFilter() {
+            const contractId = $('#filter-contract').val();
+            const pwsSelect = $('#filter-pws');
+            pwsSelect.find('option:not(:first)').remove();
+            pwsSelect.val('');
+            
+            if (!contractId) {
+                $('#filter-task').find('option:not(:first)').remove().end().val('');
+                return;
+            }
+            
+            // Fetch PWS line items for selected contract
+            const { data: pwsItems } = await supabase
+                .from('pws_line_items')
+                .select('id, code, title')
+                .eq('contract_id', contractId)
+                .eq('is_active', true)
+                .order('code');
+            
+            if (pwsItems) {
+                pwsItems.forEach(p => {
+                    pwsSelect.append(`<option value="${p.id}">${escapeHtml(p.code)} - ${escapeHtml(p.title)}</option>`);
+                });
+            }
+        }
+
+        async function updateTaskFilter() {
+            const pwsId = $('#filter-pws').val();
+            const taskSelect = $('#filter-task');
+            taskSelect.find('option:not(:first)').remove();
+            taskSelect.val('');
+            
+            if (!pwsId) return;
+            
+            // Fetch tasks for selected PWS line item
+            const { data: tasks } = await supabase
+                .from('tasks')
+                .select('id, title')
+                .eq('pws_line_item_id', pwsId)
+                .eq('is_active', true)
+                .order('title');
+            
+            if (tasks) {
+                tasks.forEach(t => {
+                    taskSelect.append(`<option value="${t.id}">${escapeHtml(t.title)}</option>`);
+                });
+            }
         }
 
         function populateTaskSelect(rows) {
             const sel = $('#update-task');
             sel.empty();
             for (const t of rows) {
-                sel.append(`<option value="${t.id}">${escapeHtml(t.task_name)}</option>`);
+                sel.append(`<option value="${t.task_id}">${escapeHtml(t.task_name)}</option>`);
             }
         }
 
@@ -462,7 +752,523 @@ $(document).ready(function() {
             resetForm();
         });
 
+        // Handle global filter changes
+        $(document).off('change', '#filter-contract').on('change', '#filter-contract', async function() {
+            state.globalFilters.contract = $(this).val();
+            state.globalFilters.team = '';
+            state.globalFilters.pws = '';
+            state.globalFilters.task = '';
+            await updateTeamFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-team').on('change', '#filter-team', async function() {
+            state.globalFilters.team = $(this).val();
+            state.globalFilters.pws = '';
+            state.globalFilters.task = '';
+            await updatePWSFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-pws').on('change', '#filter-pws', async function() {
+            state.globalFilters.pws = $(this).val();
+            state.globalFilters.task = '';
+            await updateTaskFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-task').on('change', '#filter-task', function() {
+            state.globalFilters.task = $(this).val();
+            applyFilterSort();
+        });
+
+        // Handle status and sort filter changes
+        $(document).off('change', '#filter-status').on('change', '#filter-status', function() {
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#sort-by').on('change', '#sort-by', function() {
+            applyFilterSort();
+        });
+
         load();
+    }
+
+    // --- ADMIN DASHBOARD (All Tasks) ---
+    function initializeAdminDashboard() {
+        // Admin sees all tasks across all contracts with global filters
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Dashboard - All Tasks</h2>
+            </div>
+            
+            <!-- Global Filters -->
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Filters</h5>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-3">
+                            <label for="filter-contract" class="form-label">Contract</label>
+                            <select id="filter-contract" class="form-select">
+                                <option value="">All Contracts</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-team" class="form-label">Team</label>
+                            <select id="filter-team" class="form-select">
+                                <option value="">All Teams</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-pws" class="form-label">PWS Line Item</label>
+                            <select id="filter-pws" class="form-select">
+                                <option value="">All Line Items</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label for="filter-task" class="form-label">Task</label>
+                            <select id="filter-task" class="form-select">
+                                <option value="">All Tasks</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                    <label for="filter-status" class="form-label">Filter by Short Status</label>
+                    <select id="filter-status" class="form-select">
+                        <option value="">All</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="On Hold">On Hold</option>
+                        <option value="Complete">Complete</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label for="sort-by" class="form-label">Sort by</label>
+                    <select id="sort-by" class="form-select">
+                        <option value="due_date_asc">Due Date ↑</option>
+                        <option value="due_date_desc">Due Date ↓</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-striped align-middle" id="tasks-table">
+                    <thead>
+                        <tr>
+                            <th>Contract</th>
+                            <th>Task Name</th>
+                            <th>Start Date</th>
+                            <th>Due Date</th>
+                            <th>Assigned To</th>
+                            <th>PWS Line Item</th>
+                            <th>% Complete</th>
+                            <th>Narrative</th>
+                            <th>Blockers</th>
+                            <th>Short Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        `;
+
+        $('#main-content').html(container);
+
+        const state = { 
+            raw: [], 
+            filtered: [], 
+            globalFilters: {
+                contract: '',
+                team: '',
+                pws: '',
+                task: ''
+            }
+        };
+
+        function readPrefs() {
+            const f = localStorage.getItem('msr_admin_dash_filter') || '';
+            const s = localStorage.getItem('msr_admin_dash_sort') || 'due_date_asc';
+            const gf = localStorage.getItem('msr_admin_global_filters');
+            
+            $('#filter-status').val(f);
+            $('#sort-by').val(s);
+            
+            if (gf) {
+                try {
+                    state.globalFilters = JSON.parse(gf);
+                    $('#filter-contract').val(state.globalFilters.contract || '');
+                    $('#filter-team').val(state.globalFilters.team || '');
+                    $('#filter-pws').val(state.globalFilters.pws || '');
+                    $('#filter-task').val(state.globalFilters.task || '');
+                } catch (e) {
+                    console.error('Error parsing global filters:', e);
+                }
+            }
+            
+            return { f, s };
+        }
+
+        function writePrefs(f, s) {
+            localStorage.setItem('msr_admin_dash_filter', f);
+            localStorage.setItem('msr_admin_dash_sort', s);
+            localStorage.setItem('msr_admin_global_filters', JSON.stringify(state.globalFilters));
+        }
+
+        function applyFilterSort() {
+            const f = $('#filter-status').val();
+            const s = $('#sort-by').val();
+            let rows = [...state.raw];
+            
+            // Apply global filters
+            if (state.globalFilters.contract) {
+                rows = rows.filter(r => r.contract_id === state.globalFilters.contract);
+            }
+            if (state.globalFilters.team) {
+                rows = rows.filter(r => r.team_id === state.globalFilters.team);
+            }
+            if (state.globalFilters.pws) {
+                rows = rows.filter(r => r.pws_line_item_id === state.globalFilters.pws);
+            }
+            if (state.globalFilters.task) {
+                rows = rows.filter(r => r.task_id === state.globalFilters.task);
+            }
+            
+            // Apply status filter
+            if (f) rows = rows.filter(r => (r.latest_update && r.latest_update.short_status) === f);
+            
+            // Sort
+            rows.sort((a, b) => {
+                const da = a.due_date ? new Date(a.due_date).getTime() : 0;
+                const db = b.due_date ? new Date(b.due_date).getTime() : 0;
+                if (s === 'due_date_desc') return db - da;
+                return da - db;
+            });
+            
+            state.filtered = rows;
+            renderTable();
+            writePrefs(f, s);
+        }
+
+        function renderTable() {
+            const tbody = $('#tasks-table tbody');
+            tbody.empty();
+            if (!state.filtered.length) {
+                tbody.append('<tr><td colspan="10" class="text-muted">No tasks found.</td></tr>');
+                return;
+            }
+            for (const t of state.filtered) {
+                const u = t.latest_update || {};
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(t.contract_name || '')}</td>
+                        <td>${escapeHtml(t.task_name || '')}</td>
+                        <td>${formatDate(t.start_date)}</td>
+                        <td>${formatDate(t.due_date)}</td>
+                        <td>${escapeHtml(t.assigned_label || '')}</td>
+                        <td>${escapeHtml(t.pws_line_item || '')}</td>
+                        <td>${u.percent_complete != null ? u.percent_complete + '%' : ''}</td>
+                        <td>${escapeHtml(u.narrative || '')}</td>
+                        <td>${escapeHtml(u.blockers || '')}</td>
+                        <td>${escapeHtml(u.short_status || '')}</td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function formatDate(d) {
+            if (!d) return '';
+            const dt = new Date(d);
+            return isNaN(dt.getTime()) ? '' : dt.toLocaleDateString();
+        }
+
+        function escapeHtml(s) {
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        async function fetchAllTasks() {
+            // Fetch ALL tasks with their PWS line items and contracts
+            const { data: tasks, error: tasksError } = await supabase
+                .from('tasks')
+                .select(`
+                    id,
+                    title,
+                    description,
+                    start_date,
+                    due_date,
+                    status_short,
+                    pws_line_item_id,
+                    pws_line_items (
+                        id,
+                        code,
+                        title,
+                        contract_id,
+                        contracts (
+                            id,
+                            name,
+                            code
+                        )
+                    )
+                `)
+                .eq('is_active', true);
+            
+            if (tasksError) {
+                console.error('Error fetching tasks:', tasksError);
+                return [];
+            }
+            
+            if (!tasks || tasks.length === 0) return [];
+            
+            // Process each task
+            const results = await Promise.all(tasks.map(async task => {
+                const pwsLineItem = task.pws_line_items;
+                const contract = pwsLineItem ? pwsLineItem.contracts : null;
+                
+                // Fetch task assignments separately
+                const { data: assignments } = await supabase
+                    .from('task_assignments')
+                    .select('user_id')
+                    .eq('task_id', task.id);
+                
+                // Fetch assignee names
+                let assigneeNames = 'Unassigned';
+                if (assignments && assignments.length > 0) {
+                    const userIds = assignments.map(a => a.user_id);
+                    const { data: profiles } = await supabase
+                        .from('profiles')
+                        .select('full_name')
+                        .in('id', userIds);
+                    
+                    if (profiles && profiles.length > 0) {
+                        assigneeNames = profiles.map(p => p.full_name || 'Unknown').join(', ');
+                    }
+                }
+                
+                // Fetch latest update for this task (from any user)
+                // Note: updates table uses old schema with bigint task_id, so this will fail
+                // TODO: Migrate to task_statuses table in Phase 5
+                const { data: updates, error: updateError } = await supabase
+                    .from('updates')
+                    .select('id, narrative, percent_complete, blockers, short_status, created_at')
+                    .eq('task_id', task.id)
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+                
+                // Silently handle error since updates table uses incompatible schema
+                const latest = (updates && updates.length && !updateError) ? updates[0] : null;
+                
+                return {
+                    task_id: task.id,
+                    task_name: task.title,
+                    description: task.description,
+                    start_date: task.start_date,
+                    due_date: task.due_date,
+                    status_short: task.status_short,
+                    pws_line_item_id: pwsLineItem ? pwsLineItem.id : null,
+                    pws_line_item: pwsLineItem ? `${pwsLineItem.code} - ${pwsLineItem.title}` : 'N/A',
+                    contract_id: contract ? contract.id : null,
+                    contract_name: contract ? contract.name : 'N/A',
+                    contract_code: contract ? contract.code : 'N/A',
+                    team_id: null,
+                    assigned_label: assigneeNames,
+                    latest_update: latest
+                };
+            }));
+            
+            return results;
+        }
+
+        async function populateGlobalFilters(rows) {
+            // Extract unique contracts
+            const contracts = [...new Set(rows.map(r => ({ id: r.contract_id, name: r.contract_name, code: r.contract_code })).filter(c => c.id))];
+            const uniqueContracts = contracts.filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i);
+            
+            const contractSelect = $('#filter-contract');
+            contractSelect.find('option:not(:first)').remove();
+            uniqueContracts.forEach(c => {
+                contractSelect.append(`<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`);
+            });
+            
+            // Restore saved filters and populate dependent dropdowns
+            if (state.globalFilters.contract) {
+                contractSelect.val(state.globalFilters.contract);
+                await updateTeamFilter();
+            }
+            if (state.globalFilters.team) {
+                $('#filter-team').val(state.globalFilters.team);
+                await updatePWSFilter();
+            }
+            if (state.globalFilters.pws) {
+                $('#filter-pws').val(state.globalFilters.pws);
+                await updateTaskFilter();
+            }
+            if (state.globalFilters.task) {
+                $('#filter-task').val(state.globalFilters.task);
+            }
+        }
+
+        async function updateTeamFilter() {
+            const contractId = $('#filter-contract').val();
+            const teamSelect = $('#filter-team');
+            teamSelect.find('option:not(:first)').remove();
+            teamSelect.val('');
+            
+            if (!contractId) {
+                $('#filter-pws').find('option:not(:first)').remove().end().val('');
+                $('#filter-task').find('option:not(:first)').remove().end().val('');
+                return;
+            }
+            
+            const { data: teams } = await supabase
+                .from('teams')
+                .select('id, name')
+                .eq('contract_id', contractId)
+                .eq('is_active', true)
+                .order('name');
+            
+            if (teams) {
+                teams.forEach(t => {
+                    teamSelect.append(`<option value="${t.id}">${escapeHtml(t.name)}</option>`);
+                });
+            }
+        }
+
+        async function updatePWSFilter() {
+            const contractId = $('#filter-contract').val();
+            const pwsSelect = $('#filter-pws');
+            pwsSelect.find('option:not(:first)').remove();
+            pwsSelect.val('');
+            
+            if (!contractId) {
+                $('#filter-task').find('option:not(:first)').remove().end().val('');
+                return;
+            }
+            
+            const { data: pwsItems } = await supabase
+                .from('pws_line_items')
+                .select('id, code, title')
+                .eq('contract_id', contractId)
+                .eq('is_active', true)
+                .order('code');
+            
+            if (pwsItems) {
+                pwsItems.forEach(p => {
+                    pwsSelect.append(`<option value="${p.id}">${escapeHtml(p.code)} - ${escapeHtml(p.title)}</option>`);
+                });
+            }
+        }
+
+        async function updateTaskFilter() {
+            const pwsId = $('#filter-pws').val();
+            const taskSelect = $('#filter-task');
+            taskSelect.find('option:not(:first)').remove();
+            taskSelect.val('');
+            
+            if (!pwsId) return;
+            
+            const { data: tasks } = await supabase
+                .from('tasks')
+                .select('id, title')
+                .eq('pws_line_item_id', pwsId)
+                .eq('is_active', true)
+                .order('title');
+            
+            if (tasks) {
+                tasks.forEach(t => {
+                    taskSelect.append(`<option value="${t.id}">${escapeHtml(t.title)}</option>`);
+                });
+            }
+        }
+
+        async function load() {
+            readPrefs();
+            const rows = await fetchAllTasks();
+            state.raw = rows;
+            await populateGlobalFilters(rows);
+            applyFilterSort();
+        }
+
+        // Handle global filter changes
+        $(document).off('change', '#filter-contract').on('change', '#filter-contract', async function() {
+            state.globalFilters.contract = $(this).val();
+            state.globalFilters.team = '';
+            state.globalFilters.pws = '';
+            state.globalFilters.task = '';
+            await updateTeamFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-team').on('change', '#filter-team', async function() {
+            state.globalFilters.team = $(this).val();
+            state.globalFilters.pws = '';
+            state.globalFilters.task = '';
+            await updatePWSFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-pws').on('change', '#filter-pws', async function() {
+            state.globalFilters.pws = $(this).val();
+            state.globalFilters.task = '';
+            await updateTaskFilter();
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#filter-task').on('change', '#filter-task', function() {
+            state.globalFilters.task = $(this).val();
+            applyFilterSort();
+        });
+
+        // Handle status and sort filter changes
+        $(document).off('change', '#filter-status').on('change', '#filter-status', function() {
+            applyFilterSort();
+        });
+
+        $(document).off('change', '#sort-by').on('change', '#sort-by', function() {
+            applyFilterSort();
+        });
+
+        load();
+    }
+
+    // --- TEAM LEAD DASHBOARD ---
+    function initializeTeamLeadDashboard() {
+        // Team Lead sees their team's tasks and can assign tasks
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Team Lead Dashboard</h2>
+                <div>
+                    <a href="#review" class="btn btn-primary me-2">Review Queue</a>
+                    <button id="assign-task-btn" class="btn btn-success">Assign Task</button>
+                </div>
+            </div>
+            <p class="text-muted">View and manage your team's tasks. Use the Review Queue to approve submissions.</p>
+            <div class="alert alert-info">
+                <strong>Note:</strong> Full Team Lead dashboard with task assignment will be implemented in Phase 5.
+            </div>
+        `;
+        $('#main-content').html(container);
+    }
+
+    // --- REPORTING VIEW (PM/APM) ---
+    function initializeReportingView() {
+        // PM/APM sees monthly reports for their contracts
+        const container = `
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <h2 class="mb-0">Monthly Reporting</h2>
+            </div>
+            <p class="text-muted">Review and approve monthly reports for your contracts.</p>
+            <div class="alert alert-info">
+                <strong>Note:</strong> PM/APM reporting dashboard will be implemented in Phase 7.
+            </div>
+        `;
+        $('#main-content').html(container);
     }
 
     // --- REVIEW QUEUE ---
@@ -1326,6 +2132,10 @@ $(document).ready(function() {
                 nav.append('<li class="nav-item"><a href="#review" class="nav-link">Review Queue</a></li>');
             }
             
+            if (profile && (profile.role === 'Report Approver' || profile.role === 'Admin')) {
+                nav.append('<li class="nav-item"><a href="#reporting" class="nav-link">Reporting</a></li>');
+            }
+            
             if (profile && profile.role === 'Admin') {
                 nav.append('<li class="nav-item"><a href="#admin" class="nav-link">Admin Panel</a></li>');
             }
@@ -1350,7 +2160,10 @@ $(document).ready(function() {
             } else {
                 currentUser = data.user;
                 await updateUI();
-                window.location.hash = 'dashboard'; // Go to dashboard - hashchange event will trigger router
+                // Set hash to empty to trigger role-based default landing
+                window.location.hash = '';
+                // Explicitly call router to ensure role-based routing happens
+                await router();
             }
         } catch (err) {
             $('#error-message').text('An error occurred during login: ' + err.message).show();

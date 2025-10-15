@@ -98,11 +98,13 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ---
 
-- [ ] **4.5 Add Global Filters (Contract → Team → PWS Line Item → Task)**
+- [x] **4.5 Add Global Filters (Contract → Team → PWS Line Item → Task)** *(PENDING USER APPROVAL)*
   - *Acceptance Criteria:* Filter bar present on dashboard; changing Contract filters Team/PWS/Task options. Selections persist during navigation.
+  - *Status:* ✅ Complete - Implemented cascading filters with localStorage persistence. Updated to use v3 schema.
 
-- [ ] **4.6 Role-Based Landing Views**
+- [x] **4.6 Role-Based Landing Views** *(PENDING USER APPROVAL)*
   - *Acceptance Criteria:* On login, users route to: Admin Panel; PM/APM Reporting; Team Lead Dashboard; or My Tasks (Member). Manual route guard prevents access to restricted views.
+  - *Status:* ✅ Complete - Implemented role-based routing with access control. 19 Playwright tests created.
 
 ## Phase 5 — Task Update Workflow
 
