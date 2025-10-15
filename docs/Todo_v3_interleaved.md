@@ -122,11 +122,21 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ---
 
-- [ ] **5.5 Report-Month Handling**
+- [x] **5.5 Report-Month Handling**
   - *Acceptance Criteria:* When submitting status, system derives `report_month` (first day of current month). Prevent duplicate submissions by same user for same task and month unless prior is Draft or Rejected.
+  - *Status:* ✅ Complete - Migration applied, helper functions created, duplicate prevention enforced via unique index
 
-- [ ] **5.6 Multi-Assignee Awareness**
+- [x] **5.6 Multi-Assignee Awareness**
   - *Acceptance Criteria:* Task detail displays all assignees; submitter identity recorded in `task_statuses.submitted_by`. UI indicates if lead is also an assignee.
+  - *Status:* ✅ Complete - Review queue shows all assignees with multi-assignee badge, submitter identity tracked
+
+**Phase 5 Complete!** ✅ Committed: 6ab1b18 (Oct 14, 2025)
+- Migrated from `updates` table to `task_statuses` table (resolved known schema issue)
+- Implemented report-month handling with duplicate prevention
+- Added multi-assignee awareness with badge UI
+- Bonus: Implemented auto-queue feature (6.5)
+- Tests: 8/8 passing (100% pass rate)
+- See: PHASE5_COMPLETE.md, docs/Phase5_Test_Results.md
 
 ## Phase 6 — Team Lead Review
 
@@ -144,11 +154,13 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ---
 
-- [ ] **6.5 Auto-Queue Approved Statuses**
+- [x] **6.5 Auto-Queue Approved Statuses**
   - *Acceptance Criteria:* On Approve, a row is added to `report_queue` for (contract_id, report_month, task_status_id). Unique constraint prevents duplicates; rejection requires comment.
+  - *Status:* ✅ Complete - Implemented in Phase 5, auto-queue working, rejection validation enforced
 
 - [ ] **6.6 Edit Policy Toggle (Optional)**
   - *Acceptance Criteria:* Feature flag controls whether leads can edit narratives prior to approval. If disabled, only Approve/Reject with comment allowed.
+  - *Status:* ⏭️ Deferred - Optional feature, can be added later if needed
 
 ## Phase 7 — Report Approver & Export
 
