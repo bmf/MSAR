@@ -439,16 +439,17 @@ $(document).ready(function() {
                 const pwsLineItem = task.pws_line_items;
                 const contract = pwsLineItem ? pwsLineItem.contracts : null;
                 
-                // Fetch latest update for this task by current user
-                const { data: updates } = await supabase
-                    .from('updates')
-                    .select('id, narrative, percent_complete, blockers, short_status, created_at')
+                // Fetch latest approved task status for this task by current user
+                const { data: statuses } = await supabase
+                    .from('task_statuses')
+                    .select('id, narrative, percent_complete, blockers, lead_review_status, submitted_at')
                     .eq('task_id', task.id)
-                    .eq('user_id', user.id)
-                    .order('created_at', { ascending: false })
+                    .eq('submitted_by', user.id)
+                    .eq('lead_review_status', 'approved')
+                    .order('submitted_at', { ascending: false })
                     .limit(1);
                 
-                const latest = updates && updates.length ? updates[0] : null;
+                const latest = statuses && statuses.length ? statuses[0] : null;
                 
                 return {
                     task_id: task.id,
@@ -464,7 +465,12 @@ $(document).ready(function() {
                     contract_code: contract ? contract.code : 'N/A',
                     team_id: null, // Will be populated if needed
                     assigned_label: user.email || 'Me',
-                    latest_update: latest
+                    latest_update: latest ? {
+                        narrative: latest.narrative,
+                        percent_complete: latest.percent_complete,
+                        blockers: latest.blockers,
+                        short_status: null // task_statuses doesn't have short_status, use task.status_short instead
+                    } : null
                 };
             }));
             
@@ -671,20 +677,47 @@ $(document).ready(function() {
                 return false;
             }
 
-            const updateData = {
+            // Get current report month (first day of current month)
+            const now = new Date();
+            const reportMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            
+            // Check if user can submit for this task/month (no pending/approved submission exists)
+            const { data: existingStatus } = await supabase
+                .from('task_statuses')
+                .select('id, lead_review_status')
+                .eq('task_id', taskId)
+                .eq('submitted_by', user.id)
+                .eq('report_month', reportMonth)
+                .in('lead_review_status', ['pending', 'approved'])
+                .maybeSingle();
+            
+            if (existingStatus && !isDraft) {
+                $('#update-form-error').text('You have already submitted a status for this task this month. Wait for review or contact your Team Lead.').show();
+                return false;
+            }
+
+            const statusData = {
                 task_id: taskId,
-                user_id: user.id,
+                submitted_by: user.id,
                 narrative: narrative || null,
                 percent_complete: percent ? parseInt(percent, 10) : null,
                 blockers: blockers || null,
-                short_status: shortStatus || null,
-                status: isDraft ? 'draft' : 'submitted',
-                submitted_at: isDraft ? null : new Date().toISOString()
+                lead_review_status: isDraft ? 'pending' : 'pending', // Both draft and submit start as pending
+                report_month: reportMonth,
+                submitted_at: new Date().toISOString()
             };
+            
+            // Also update the task's short status
+            if (shortStatus && !isDraft) {
+                await supabase
+                    .from('tasks')
+                    .update({ status_short: shortStatus })
+                    .eq('id', taskId);
+            }
 
             const { data, error } = await supabase
-                .from('updates')
-                .insert([updateData])
+                .from('task_statuses')
+                .insert([statusData])
                 .select();
 
             if (error) {
@@ -1051,18 +1084,16 @@ $(document).ready(function() {
                     }
                 }
                 
-                // Fetch latest update for this task (from any user)
-                // Note: updates table uses old schema with bigint task_id, so this will fail
-                // TODO: Migrate to task_statuses table in Phase 5
-                const { data: updates, error: updateError } = await supabase
-                    .from('updates')
-                    .select('id, narrative, percent_complete, blockers, short_status, created_at')
+                // Fetch latest approved task status for this task (from any user)
+                const { data: statuses } = await supabase
+                    .from('task_statuses')
+                    .select('id, narrative, percent_complete, blockers, lead_review_status, submitted_at')
                     .eq('task_id', task.id)
-                    .order('created_at', { ascending: false })
+                    .eq('lead_review_status', 'approved')
+                    .order('submitted_at', { ascending: false })
                     .limit(1);
                 
-                // Silently handle error since updates table uses incompatible schema
-                const latest = (updates && updates.length && !updateError) ? updates[0] : null;
+                const latest = (statuses && statuses.length) ? statuses[0] : null;
                 
                 return {
                     task_id: task.id,
@@ -1078,7 +1109,12 @@ $(document).ready(function() {
                     contract_code: contract ? contract.code : 'N/A',
                     team_id: null,
                     assigned_label: assigneeNames,
-                    latest_update: latest
+                    latest_update: latest ? {
+                        narrative: latest.narrative,
+                        percent_complete: latest.percent_complete,
+                        blockers: latest.blockers,
+                        short_status: null // Use task.status_short instead
+                    } : null
                 };
             }));
             
@@ -1282,10 +1318,11 @@ $(document).ready(function() {
                     <thead>
                         <tr>
                             <th>Task Name</th>
+                            <th>PWS Line Item</th>
                             <th>Submitted By</th>
+                            <th>All Assignees</th>
                             <th>Submitted At</th>
                             <th>% Complete</th>
-                            <th>Short Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -1366,10 +1403,10 @@ $(document).ready(function() {
             const user = sessionData.session ? sessionData.session.user : null;
             if (!user) return [];
 
-            // Get current user's profile to check role and team
+            // Get current user's profile to check role
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('role, team')
+                .select('role')
                 .eq('id', user.id)
                 .single();
 
@@ -1377,13 +1414,35 @@ $(document).ready(function() {
                 return [];
             }
 
-            // Get team members from the same team
-            const { data: teamMembers } = await supabase
-                .from('profiles')
-                .select('id, full_name')
-                .eq('team', profile.team);
+            // Get teams where user is a lead (v3 schema)
+            const { data: leadTeams } = await supabase
+                .from('team_memberships')
+                .select('team_id')
+                .eq('user_id', user.id)
+                .eq('role_in_team', 'lead');
 
-            if (!teamMembers || teamMembers.length === 0) return [];
+            if (!leadTeams || leadTeams.length === 0) return [];
+
+            const teamIds = leadTeams.map(t => t.team_id);
+
+            // Get all team members from these teams
+            const { data: teamMemberships } = await supabase
+                .from('team_memberships')
+                .select(`
+                    user_id,
+                    profiles:user_id (
+                        id,
+                        full_name
+                    )
+                `)
+                .in('team_id', teamIds);
+
+            if (!teamMemberships || teamMemberships.length === 0) return [];
+
+            const teamMembers = teamMemberships.map(tm => ({
+                id: tm.profiles.id,
+                full_name: tm.profiles.full_name
+            }));
 
             const teamMemberIds = teamMembers.map(m => m.id);
             const teamMemberMap = {};
@@ -1391,12 +1450,12 @@ $(document).ready(function() {
                 teamMemberMap[m.id] = m.full_name;
             });
 
-            // Get submitted updates from team members
-            const { data: updates, error } = await supabase
-                .from('updates')
-                .select('id, task_id, user_id, narrative, percent_complete, blockers, short_status, submitted_at')
-                .eq('status', 'submitted')
-                .in('user_id', teamMemberIds)
+            // Get pending task statuses from team members
+            const { data: statuses, error } = await supabase
+                .from('task_statuses')
+                .select('id, task_id, submitted_by, narrative, percent_complete, blockers, submitted_at, report_month')
+                .eq('lead_review_status', 'pending')
+                .in('submitted_by', teamMemberIds)
                 .order('submitted_at', { ascending: false });
 
             if (error) {
@@ -1404,44 +1463,95 @@ $(document).ready(function() {
                 return [];
             }
 
-            if (!updates || updates.length === 0) return [];
+            if (!statuses || statuses.length === 0) return [];
 
-            // Get task names for all updates
-            const taskIds = [...new Set(updates.map(u => u.task_id))];
+            // Get task details for all statuses
+            const taskIds = [...new Set(statuses.map(s => s.task_id))];
             const { data: tasks } = await supabase
-                .from('pws_tasks')
-                .select('id, task_name')
+                .from('tasks')
+                .select(`
+                    id,
+                    title,
+                    status_short,
+                    pws_line_items (
+                        code,
+                        title
+                    )
+                `)
                 .in('id', taskIds);
 
             const taskMap = {};
             if (tasks) {
                 tasks.forEach(t => {
-                    taskMap[t.id] = t.task_name;
+                    const pwsLineItem = t.pws_line_items;
+                    taskMap[t.id] = {
+                        task_name: t.title,
+                        status_short: t.status_short,
+                        pws_line_item: pwsLineItem ? `${pwsLineItem.code} - ${pwsLineItem.title}` : 'N/A'
+                    };
                 });
             }
+            
+            // Get all assignees for each task to show multi-assignee info
+            const assigneesMap = {};
+            for (const taskId of taskIds) {
+                const { data: assignments } = await supabase
+                    .from('task_assignments')
+                    .select('user_id')
+                    .eq('task_id', taskId);
+                
+                if (assignments && assignments.length > 0) {
+                    const userIds = assignments.map(a => a.user_id);
+                    const { data: profiles } = await supabase
+                        .from('profiles')
+                        .select('id, full_name')
+                        .in('id', userIds);
+                    
+                    if (profiles) {
+                        assigneesMap[taskId] = profiles.map(p => ({
+                            id: p.id,
+                            name: p.full_name || 'Unknown'
+                        }));
+                    }
+                }
+            }
 
-            return updates.map(u => ({
-                ...u,
-                task_name: taskMap[u.task_id] || 'Unknown Task',
-                submitted_by: teamMemberMap[u.user_id] || 'Unknown User'
-            }));
+            return statuses.map(s => {
+                const taskInfo = taskMap[s.task_id] || { task_name: 'Unknown Task', status_short: '', pws_line_item: 'N/A' };
+                const assignees = assigneesMap[s.task_id] || [];
+                const assigneeNames = assignees.map(a => a.name).join(', ') || 'Unassigned';
+                const isMultiAssignee = assignees.length > 1;
+                
+                return {
+                    ...s,
+                    task_name: taskInfo.task_name,
+                    status_short: taskInfo.status_short,
+                    pws_line_item: taskInfo.pws_line_item,
+                    submitted_by_name: teamMemberMap[s.submitted_by] || 'Unknown User',
+                    all_assignees: assigneeNames,
+                    is_multi_assignee: isMultiAssignee,
+                    assignee_count: assignees.length
+                };
+            });
         }
 
         function renderTable() {
             const tbody = $('#review-table tbody');
             tbody.empty();
             if (!state.submissions.length) {
-                tbody.append('<tr><td colspan="6" class="text-muted">No pending submissions.</td></tr>');
+                tbody.append('<tr><td colspan="7" class="text-muted">No pending submissions.</td></tr>');
                 return;
             }
             for (const s of state.submissions) {
+                const multiAssigneeBadge = s.is_multi_assignee ? `<span class="badge bg-info ms-1" title="${s.assignee_count} assignees">${s.assignee_count}</span>` : '';
                 const tr = `
                     <tr>
                         <td>${escapeHtml(s.task_name)}</td>
-                        <td>${escapeHtml(s.submitted_by)}</td>
+                        <td><small>${escapeHtml(s.pws_line_item)}</small></td>
+                        <td>${escapeHtml(s.submitted_by_name)}</td>
+                        <td>${escapeHtml(s.all_assignees)}${multiAssigneeBadge}</td>
                         <td>${formatDateTime(s.submitted_at)}</td>
                         <td>${s.percent_complete != null ? s.percent_complete + '%' : ''}</td>
-                        <td>${escapeHtml(s.short_status || '')}</td>
                         <td><button class="btn btn-sm btn-primary review-btn" data-id="${s.id}">Review</button></td>
                     </tr>
                 `;
@@ -1466,12 +1576,19 @@ $(document).ready(function() {
             $('#review-short-status').val(submission.short_status || 'In Progress');
             $('#review-comments').val('');
 
+            const multiAssigneeInfo = submission.is_multi_assignee 
+                ? `<div class="alert alert-info"><strong>Multi-Assignee Task:</strong> This task has ${submission.assignee_count} assignees: ${escapeHtml(submission.all_assignees)}</div>` 
+                : '';
+            
             const details = `
                 <div class="mb-3">
                     <strong>Task:</strong> ${escapeHtml(submission.task_name)}<br>
-                    <strong>Submitted By:</strong> ${escapeHtml(submission.submitted_by)}<br>
+                    <strong>PWS Line Item:</strong> ${escapeHtml(submission.pws_line_item)}<br>
+                    <strong>Submitted By:</strong> ${escapeHtml(submission.submitted_by_name)}<br>
+                    <strong>Report Month:</strong> ${submission.report_month}<br>
                     <strong>Submitted At:</strong> ${formatDateTime(submission.submitted_at)}
                 </div>
+                ${multiAssigneeInfo}
             `;
             $('#review-details').html(details);
 
@@ -1481,7 +1598,7 @@ $(document).ready(function() {
         }
 
         async function processReview(action) {
-            const updateId = $('#review-update-id').val();
+            const statusId = $('#review-update-id').val();
             const comments = $('#review-comments').val().trim();
             
             const { data: sessionData } = await supabase.auth.getSession();
@@ -1491,65 +1608,98 @@ $(document).ready(function() {
                 return false;
             }
 
-            let newStatus = 'submitted';
-            let approvalStatus = '';
+            let newReviewStatus = 'pending';
 
-            if (action === 'approve') {
-                newStatus = 'approved';
-                approvalStatus = 'approved';
-            } else if (action === 'approve_with_changes') {
-                newStatus = 'approved';
-                approvalStatus = 'modified';
+            if (action === 'approve' || action === 'approve_with_changes') {
+                newReviewStatus = 'approved';
                 
-                // Update the submission with modified values
-                const narrative = $('#review-narrative').val().trim();
-                const percent = $('#review-percent').val();
-                const blockers = $('#review-blockers').val().trim();
-                const shortStatus = $('#review-short-status').val();
+                // If approving with changes, update the submission with modified values
+                if (action === 'approve_with_changes') {
+                    const narrative = $('#review-narrative').val().trim();
+                    const percent = $('#review-percent').val();
+                    const blockers = $('#review-blockers').val().trim();
+                    const shortStatus = $('#review-short-status').val();
 
-                const { error: updateError } = await supabase
-                    .from('updates')
-                    .update({
-                        narrative: narrative,
-                        percent_complete: percent ? parseInt(percent, 10) : null,
-                        blockers: blockers || null,
-                        short_status: shortStatus
-                    })
-                    .eq('id', updateId);
+                    const { error: updateError } = await supabase
+                        .from('task_statuses')
+                        .update({
+                            narrative: narrative,
+                            percent_complete: percent ? parseInt(percent, 10) : null,
+                            blockers: blockers || null
+                        })
+                        .eq('id', statusId);
 
-                if (updateError) {
-                    $('#review-form-error').text('Error updating submission: ' + updateError.message).show();
-                    return false;
+                    if (updateError) {
+                        $('#review-form-error').text('Error updating submission: ' + updateError.message).show();
+                        return false;
+                    }
+                    
+                    // Update task's short status
+                    const submission = state.submissions.find(s => s.id === statusId);
+                    if (submission && shortStatus) {
+                        await supabase
+                            .from('tasks')
+                            .update({ status_short: shortStatus })
+                            .eq('id', submission.task_id);
+                    }
                 }
             } else if (action === 'reject') {
-                newStatus = 'rejected';
-                approvalStatus = 'rejected';
+                newReviewStatus = 'rejected';
+                if (!comments) {
+                    $('#review-form-error').text('Comments are required when rejecting a submission.').show();
+                    return false;
+                }
             }
 
-            // Update the status of the update
+            // Update the lead review status
             const { error: statusError } = await supabase
-                .from('updates')
-                .update({ status: newStatus })
-                .eq('id', updateId);
+                .from('task_statuses')
+                .update({ 
+                    lead_review_status: newReviewStatus,
+                    lead_reviewer: user.id,
+                    lead_reviewed_at: new Date().toISOString(),
+                    lead_review_comment: comments || null
+                })
+                .eq('id', statusId);
 
             if (statusError) {
-                $('#review-form-error').text('Error updating status: ' + statusError.message).show();
+                $('#review-form-error').text('Error updating review status: ' + statusError.message).show();
                 return false;
             }
 
-            // Create approval record
-            const { error: approvalError } = await supabase
-                .from('approvals')
-                .insert([{
-                    update_id: updateId,
-                    approver_id: user.id,
-                    status: approvalStatus,
-                    comments: comments || null
-                }]);
-
-            if (approvalError) {
-                $('#review-form-error').text('Error creating approval record: ' + approvalError.message).show();
-                return false;
+            // Phase 5 Feature: Auto-queue approved statuses for monthly reporting
+            if (newReviewStatus === 'approved') {
+                const submission = state.submissions.find(s => s.id === statusId);
+                if (submission) {
+                    // Get the contract_id for this task
+                    const { data: taskData } = await supabase
+                        .from('tasks')
+                        .select(`
+                            pws_line_items (
+                                contract_id
+                            )
+                        `)
+                        .eq('id', submission.task_id)
+                        .single();
+                    
+                    if (taskData && taskData.pws_line_items) {
+                        const contractId = taskData.pws_line_items.contract_id;
+                        
+                        // Add to report_queue (unique constraint prevents duplicates)
+                        const { error: queueError } = await supabase
+                            .from('report_queue')
+                            .insert([{
+                                contract_id: contractId,
+                                report_month: submission.report_month,
+                                task_status_id: statusId
+                            }]);
+                        
+                        // Silently ignore duplicate errors (23505 is PostgreSQL unique violation)
+                        if (queueError && !queueError.message.includes('duplicate') && !queueError.code === '23505') {
+                            console.warn('Error adding to report queue:', queueError);
+                        }
+                    }
+                }
             }
 
             return true;
