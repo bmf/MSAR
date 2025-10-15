@@ -130,12 +130,13 @@ Each task includes a checkbox and clear acceptance criteria.
   - *Acceptance Criteria:* Task detail displays all assignees; submitter identity recorded in `task_statuses.submitted_by`. UI indicates if lead is also an assignee.
   - *Status:* ✅ Complete - Review queue shows all assignees with multi-assignee badge, submitter identity tracked
 
-**Phase 5 Complete!** ✅ Committed: 6ab1b18 (Oct 14, 2025)
+**Phase 5 Complete!** ✅ Committed: 6ab1b18, 5302412 (Oct 14, 2025)
 - Migrated from `updates` table to `task_statuses` table (resolved known schema issue)
 - Implemented report-month handling with duplicate prevention
 - Added multi-assignee awareness with badge UI
+- Implemented Team Lead dashboard with team task visibility
 - Bonus: Implemented auto-queue feature (6.5)
-- Tests: 8/8 passing (100% pass rate)
+- Tests: 10/10 passing (100% pass rate)
 - See: PHASE5_COMPLETE.md, docs/Phase5_Test_Results.md
 
 ## Phase 6 — Team Lead Review
