@@ -9,6 +9,16 @@ $(document).ready(function() {
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     window.msrSupabase = supabase; // expose for console diagnostics
     let currentUser = null;
+    
+    // --- UTILITY FUNCTIONS ---
+    function escapeHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
 
     // --- HTML TEMPLATES ---
     const appLayout = `
@@ -1274,22 +1284,157 @@ $(document).ready(function() {
     }
 
     // --- TEAM LEAD DASHBOARD ---
-    function initializeTeamLeadDashboard() {
+    async function initializeTeamLeadDashboard() {
         // Team Lead sees their team's tasks and can assign tasks
         const container = `
             <div class="d-flex align-items-center justify-content-between mb-3">
                 <h2 class="mb-0">Team Lead Dashboard</h2>
                 <div>
                     <a href="#review" class="btn btn-primary me-2">Review Queue</a>
-                    <button id="assign-task-btn" class="btn btn-success">Assign Task</button>
+                    <button id="assign-task-btn" class="btn btn-success" disabled>Assign Task</button>
                 </div>
             </div>
             <p class="text-muted">View and manage your team's tasks. Use the Review Queue to approve submissions.</p>
-            <div class="alert alert-info">
-                <strong>Note:</strong> Full Team Lead dashboard with task assignment will be implemented in Phase 5.
+            
+            <div class="table-responsive">
+                <table class="table table-striped align-middle" id="team-tasks-table">
+                    <thead>
+                        <tr>
+                            <th>Task Name</th>
+                            <th>PWS Line Item</th>
+                            <th>Assigned To</th>
+                            <th>Status</th>
+                            <th>% Complete</th>
+                            <th>Latest Update</th>
+                            <th>Due Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="7" class="text-center">Loading...</td></tr>
+                    </tbody>
+                </table>
             </div>
         `;
         $('#main-content').html(container);
+        
+        // Load team tasks
+        await loadTeamTasks();
+    }
+    
+    async function loadTeamTasks() {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const user = sessionData.session ? sessionData.session.user : null;
+        if (!user) return;
+        
+        // Get teams where user is a lead
+        const { data: leadTeams } = await supabase
+            .from('team_memberships')
+            .select('team_id')
+            .eq('user_id', user.id)
+            .eq('role_in_team', 'lead');
+        
+        if (!leadTeams || leadTeams.length === 0) {
+            $('#team-tasks-table tbody').html('<tr><td colspan="7" class="text-muted">You are not a lead of any team.</td></tr>');
+            return;
+        }
+        
+        const teamIds = leadTeams.map(t => t.team_id);
+        
+        // Get all team members from these teams
+        const { data: teamMemberships } = await supabase
+            .from('team_memberships')
+            .select('user_id')
+            .in('team_id', teamIds);
+        
+        if (!teamMemberships || teamMemberships.length === 0) {
+            $('#team-tasks-table tbody').html('<tr><td colspan="7" class="text-muted">No team members found.</td></tr>');
+            return;
+        }
+        
+        const teamMemberIds = teamMemberships.map(tm => tm.user_id);
+        
+        // Get profiles for team members
+        const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', teamMemberIds);
+        
+        // Get all tasks assigned to team members
+        const { data: assignments } = await supabase
+            .from('task_assignments')
+            .select(`
+                task_id,
+                user_id,
+                tasks (
+                    id,
+                    title,
+                    status_short,
+                    due_date,
+                    pws_line_items (
+                        code,
+                        title
+                    )
+                )
+            `)
+            .in('user_id', teamMemberIds);
+        
+        if (!assignments || assignments.length === 0) {
+            $('#team-tasks-table tbody').html('<tr><td colspan="7" class="text-muted">No tasks assigned to team members.</td></tr>');
+            return;
+        }
+        
+        // Get latest approved statuses for these tasks
+        const taskIds = [...new Set(assignments.map(a => a.task_id))];
+        const { data: statuses } = await supabase
+            .from('task_statuses')
+            .select('task_id, submitted_by, narrative, percent_complete, submitted_at, lead_review_status')
+            .in('task_id', taskIds)
+            .eq('lead_review_status', 'approved')
+            .order('submitted_at', { ascending: false });
+        
+        // Build task map with latest status
+        const taskStatusMap = {};
+        if (statuses) {
+            statuses.forEach(s => {
+                const key = `${s.task_id}_${s.submitted_by}`;
+                if (!taskStatusMap[key]) {
+                    taskStatusMap[key] = s;
+                }
+            });
+        }
+        
+        // Build user map
+        const userMap = {};
+        if (profiles) {
+            profiles.forEach(p => {
+                userMap[p.id] = p.full_name || 'Unknown';
+            });
+        }
+        
+        // Render table
+        const tbody = $('#team-tasks-table tbody');
+        tbody.empty();
+        
+        assignments.forEach(a => {
+            const task = a.tasks;
+            const pwsLineItem = task.pws_line_items;
+            const assignedTo = userMap[a.user_id] || 'Unknown';
+            const statusKey = `${a.task_id}_${a.user_id}`;
+            const latestStatus = taskStatusMap[statusKey];
+            
+            const row = `
+                <tr>
+                    <td>${escapeHtml(task.title)}</td>
+                    <td>${pwsLineItem ? escapeHtml(`${pwsLineItem.code} - ${pwsLineItem.title}`) : 'N/A'}</td>
+                    <td>${escapeHtml(assignedTo)}</td>
+                    <td><span class="badge bg-secondary">${escapeHtml(task.status_short || 'N/A')}</span></td>
+                    <td>${latestStatus ? latestStatus.percent_complete + '%' : 'N/A'}</td>
+                    <td>${latestStatus ? escapeHtml(latestStatus.narrative.substring(0, 50) + '...') : 'No updates'}</td>
+                    <td>${task.due_date || 'N/A'}</td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
     }
 
     // --- REPORTING VIEW (PM/APM) ---

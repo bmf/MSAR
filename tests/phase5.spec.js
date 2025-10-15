@@ -279,7 +279,7 @@ test.describe('Phase 5: Task Update Workflow with Report-Month and Multi-Assigne
   });
   
   test.describe('Dashboard Display', () => {
-    test('should show latest approved status in dashboard', async ({ page }) => {
+    test('should show latest approved status in member dashboard', async ({ page }) => {
       await loginAndWaitForDashboard(page, MEMBER_EMAIL, MEMBER_PASSWORD);
       
       // Wait for table to load
@@ -294,6 +294,50 @@ test.describe('Phase 5: Task Update Workflow with Report-Month and Multi-Assigne
       await expect(page.locator('th:has-text("% Complete")')).toBeVisible();
       await expect(page.locator('th:has-text("Narrative")')).toBeVisible();
       await expect(page.locator('th:has-text("Blockers")')).toBeVisible();
+    });
+    
+    test('should show team tasks in team lead dashboard', async ({ page }) => {
+      await loginAndWaitForDashboard(page, LEAD_EMAIL, LEAD_PASSWORD);
+      
+      // Wait for team tasks table to load
+      await page.waitForSelector('#team-tasks-table', { timeout: 5000 });
+      
+      // Verify table structure
+      const headers = page.locator('#team-tasks-table thead th');
+      await expect(headers).toHaveCount(7);
+      
+      // Check for expected columns
+      await expect(page.locator('th:has-text("Task Name")')).toBeVisible();
+      await expect(page.locator('th:has-text("PWS Line Item")')).toBeVisible();
+      await expect(page.locator('th:has-text("Assigned To")')).toBeVisible();
+      await expect(page.locator('th:has-text("Status")')).toBeVisible();
+      await expect(page.locator('th:has-text("% Complete")')).toBeVisible();
+      await expect(page.locator('th:has-text("Latest Update")')).toBeVisible();
+      await expect(page.locator('th:has-text("Due Date")')).toBeVisible();
+      
+      // Check that table has data (at least one row)
+      const rows = await page.locator('#team-tasks-table tbody tr').count();
+      expect(rows).toBeGreaterThan(0);
+      
+      // Verify the row is not a "no data" message
+      const firstRowText = await page.locator('#team-tasks-table tbody tr').first().textContent();
+      expect(firstRowText).not.toContain('No team members');
+      expect(firstRowText).not.toContain('No tasks assigned');
+    });
+    
+    test('should show Review Queue button in team lead dashboard', async ({ page }) => {
+      await loginAndWaitForDashboard(page, LEAD_EMAIL, LEAD_PASSWORD);
+      
+      // Check for Review Queue button in the main content area (not nav)
+      const reviewQueueBtn = page.locator('#main-content a[href="#review"]:has-text("Review Queue")');
+      await expect(reviewQueueBtn).toBeVisible();
+      
+      // Verify it's clickable
+      await reviewQueueBtn.click();
+      await page.waitForTimeout(1000);
+      
+      // Should navigate to review queue
+      await expect(page.locator('#review-table')).toBeVisible({ timeout: 5000 });
     });
   });
   
