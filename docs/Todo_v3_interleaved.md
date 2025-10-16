@@ -192,7 +192,7 @@ Each task includes a checkbox and clear acceptance criteria.
 
 - [x] **8.1 Create Admin Panel**
   - *Acceptance Criteria:* Displays users with columns: Username, Role, Team, Created At.
-  - *Status:* Complete - Admin panel with tabbed interface (Users & Account Requests)
+  - *Status:* ✅ Complete - Admin panel with tabbed interface (Users & Account Requests)
 
 - [x] **8.2 Approve Account Requests**
   - *Acceptance Criteria:* Admin can approve pending account requests; new users created in Supabase Auth and `profiles`.
@@ -216,17 +216,21 @@ Each task includes a checkbox and clear acceptance criteria.
 
 ---
 
-- [ ] **8.7 Contracts CRUD**
+- [x] **8.7 Contracts CRUD**
   - *Acceptance Criteria:* Admin can create, update, archive contracts; `code` is unique; filtering by contract available globally.
+  - *Status:* ✅ Complete - Contracts tab with create/edit/archive functionality, unique code enforcement, global contract filtering
 
-- [ ] **8.8 Teams CRUD & Memberships**
+- [x] **8.8 Teams CRUD & Memberships**
   - *Acceptance Criteria:* Admin can create teams per contract and assign users as **lead** or **member**; uniqueness and role constraints enforced.
+  - *Status:* ✅ Complete - Teams tab with membership management, lead/member roles, contract-scoped teams
 
-- [ ] **8.9 PWS Line Items Lifecycle**
+- [x] **8.9 PWS Line Items Lifecycle**
   - *Acceptance Criteria:* Admin can create/update/retire PWS line items with `code`, `title`, `description`, `periodicity`. Retired items cannot receive new tasks; existing tasks stay visible with badge.
+  - *Status:* ✅ Complete - PWS Line Items tab with full lifecycle management, retire/activate toggle, status badges
 
-- [ ] **8.10 Roles per Contract**
+- [x] **8.10 Roles per Contract**
   - *Acceptance Criteria:* Admin can assign PM/APM/Lead/Member roles per contract via `user_contract_roles`. Changes reflect immediately in RLS-scoped views.
+  - *Status:* ✅ Complete - Contract Roles tab with role assignment/removal, contract-scoped permissions, session invalidation on role changes
 
 ## Phase 9 — Non-Functional Requirements
 

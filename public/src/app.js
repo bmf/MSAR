@@ -2767,6 +2767,18 @@ $(document).ready(function() {
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="requests-tab" data-bs-toggle="tab" data-bs-target="#requests-panel" type="button" role="tab">Account Requests</button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="contracts-tab" data-bs-toggle="tab" data-bs-target="#contracts-panel" type="button" role="tab">Contracts</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="teams-tab" data-bs-toggle="tab" data-bs-target="#teams-panel" type="button" role="tab">Teams</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pws-tab" data-bs-toggle="tab" data-bs-target="#pws-panel" type="button" role="tab">PWS Line Items</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="contract-roles-tab" data-bs-toggle="tab" data-bs-target="#contract-roles-panel" type="button" role="tab">Contract Roles</button>
+                </li>
             </ul>
             
             <div class="tab-content" id="admin-tab-content">
@@ -2800,6 +2812,108 @@ $(document).ready(function() {
                                     <th>Reason</th>
                                     <th>Requested At</th>
                                     <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="contracts-panel" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">Contracts</h4>
+                        <button class="btn btn-primary" id="new-contract-btn">New Contract</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="contracts-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Name</th>
+                                    <th>Status</th>
+                                    <th>Created At</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="teams-panel" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">Teams</h4>
+                        <button class="btn btn-primary" id="new-team-btn">New Team</button>
+                    </div>
+                    <div class="mb-3">
+                        <label for="teams-contract-filter" class="form-label">Filter by Contract:</label>
+                        <select id="teams-contract-filter" class="form-select" style="max-width: 300px;">
+                            <option value="">All Contracts</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="teams-table">
+                            <thead>
+                                <tr>
+                                    <th>Contract</th>
+                                    <th>Team Name</th>
+                                    <th>Status</th>
+                                    <th>Members</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="pws-panel" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">PWS Line Items</h4>
+                        <button class="btn btn-primary" id="new-pws-btn">New PWS Line Item</button>
+                    </div>
+                    <div class="mb-3">
+                        <label for="pws-contract-filter" class="form-label">Filter by Contract:</label>
+                        <select id="pws-contract-filter" class="form-select" style="max-width: 300px;">
+                            <option value="">All Contracts</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="pws-table">
+                            <thead>
+                                <tr>
+                                    <th>Contract</th>
+                                    <th>Code</th>
+                                    <th>Title</th>
+                                    <th>Periodicity</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="tab-pane fade" id="contract-roles-panel" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">Contract Roles</h4>
+                        <button class="btn btn-primary" id="new-contract-role-btn">Assign Role</button>
+                    </div>
+                    <div class="mb-3">
+                        <label for="roles-contract-filter" class="form-label">Filter by Contract:</label>
+                        <select id="roles-contract-filter" class="form-select" style="max-width: 300px;">
+                            <option value="">All Contracts</option>
+                        </select>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle" id="contract-roles-table">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Contract</th>
+                                    <th>Role</th>
                                     <th>Actions</th>
                                 </tr>
                             </thead>
@@ -2893,11 +3007,221 @@ $(document).ready(function() {
                     </div>
                 </div>
             </div>
+            
+            <!-- Contract Modal -->
+            <div class="modal fade" id="contract-modal" tabindex="-1" aria-labelledby="contractModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="contractModalLabel">Contract</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="contract-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="contract-form">
+                                <input type="hidden" id="contract-id" />
+                                <div class="mb-3">
+                                    <label for="contract-code" class="form-label">Code *</label>
+                                    <input type="text" id="contract-code" class="form-control" required placeholder="e.g., NMC-2025" />
+                                    <small class="form-text text-muted">Unique identifier for the contract</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="contract-name" class="form-label">Name *</label>
+                                    <input type="text" id="contract-name" class="form-control" required placeholder="e.g., Navy Maintenance Contract" />
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Contract</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Team Modal -->
+            <div class="modal fade" id="team-modal" tabindex="-1" aria-labelledby="teamModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="teamModalLabel">Team</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="team-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="team-form">
+                                <input type="hidden" id="team-id" />
+                                <div class="mb-3">
+                                    <label for="team-contract" class="form-label">Contract *</label>
+                                    <select id="team-contract" class="form-select" required>
+                                        <option value="">Select Contract</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="team-name" class="form-label">Team Name *</label>
+                                    <input type="text" id="team-name" class="form-control" required placeholder="e.g., Maintenance Team Alpha" />
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save Team</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Team Membership Modal -->
+            <div class="modal fade" id="team-membership-modal" tabindex="-1" aria-labelledby="teamMembershipModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="teamMembershipModalLabel">Manage Team Members</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="membership-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <input type="hidden" id="membership-team-id" />
+                            <h6 id="membership-team-name"></h6>
+                            
+                            <h6 class="mt-3">Add Member</h6>
+                            <form id="add-membership-form" class="mb-4">
+                                <div class="row g-2">
+                                    <div class="col-md-5">
+                                        <label for="membership-user" class="form-label">User *</label>
+                                        <select id="membership-user" class="form-select" required>
+                                            <option value="">Select User</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="membership-role" class="form-label">Role *</label>
+                                        <select id="membership-role" class="form-select" required>
+                                            <option value="member">Member</option>
+                                            <option value="lead">Lead</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3 d-flex align-items-end">
+                                        <button type="submit" class="btn btn-success w-100">Add</button>
+                                    </div>
+                                </div>
+                            </form>
+                            
+                            <h6>Current Members</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm" id="memberships-table">
+                                    <thead>
+                                        <tr>
+                                            <th>User</th>
+                                            <th>Role</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- PWS Line Item Modal -->
+            <div class="modal fade" id="pws-modal" tabindex="-1" aria-labelledby="pwsModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="pwsModalLabel">PWS Line Item</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="pws-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="pws-form">
+                                <input type="hidden" id="pws-id" />
+                                <div class="mb-3">
+                                    <label for="pws-contract" class="form-label">Contract *</label>
+                                    <select id="pws-contract" class="form-select" required>
+                                        <option value="">Select Contract</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pws-code" class="form-label">Code *</label>
+                                    <input type="text" id="pws-code" class="form-control" required placeholder="e.g., 4.1.1.2" />
+                                    <small class="form-text text-muted">PWS line item code (e.g., 4.1.1.2)</small>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pws-title" class="form-label">Title *</label>
+                                    <input type="text" id="pws-title" class="form-control" required placeholder="e.g., Maintenance Planning" />
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pws-description" class="form-label">Description</label>
+                                    <textarea id="pws-description" class="form-control" rows="3" placeholder="Detailed description"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="pws-periodicity" class="form-label">Periodicity</label>
+                                    <select id="pws-periodicity" class="form-select">
+                                        <option value="">Select...</option>
+                                        <option value="daily">Daily</option>
+                                        <option value="weekly">Weekly</option>
+                                        <option value="monthly">Monthly</option>
+                                        <option value="quarterly">Quarterly</option>
+                                        <option value="as-needed">As Needed</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Save PWS Line Item</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contract Role Modal -->
+            <div class="modal fade" id="contract-role-modal" tabindex="-1" aria-labelledby="contractRoleModalLabel" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="contractRoleModalLabel">Assign Contract Role</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div id="contract-role-form-error" class="alert alert-danger" style="display: none;"></div>
+                            <form id="contract-role-form">
+                                <input type="hidden" id="contract-role-id" />
+                                <div class="mb-3">
+                                    <label for="contract-role-user" class="form-label">User *</label>
+                                    <select id="contract-role-user" class="form-select" required>
+                                        <option value="">Select User</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="contract-role-contract" class="form-label">Contract *</label>
+                                    <select id="contract-role-contract" class="form-select" required>
+                                        <option value="">Select Contract</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="contract-role-role" class="form-label">Role *</label>
+                                    <select id="contract-role-role" class="form-select" required>
+                                        <option value="">Select Role</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="PM">PM</option>
+                                        <option value="APM">APM</option>
+                                        <option value="Team Lead">Team Lead</option>
+                                        <option value="Team Member">Team Member</option>
+                                    </select>
+                                    <small class="form-text text-muted">This role applies only to the selected contract</small>
+                                </div>
+                                <button type="submit" class="btn btn-primary">Assign Role</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
         `;
 
         $('#main-content').html(container);
 
-        const state = { users: [], requests: [] };
+        const state = { 
+            users: [], 
+            requests: [],
+            contracts: [],
+            teams: [],
+            pwsLineItems: [],
+            contractRoles: [],
+            teamMemberships: {}
+        };
 
         function escapeHtml(s) {
             return String(s)
@@ -2935,10 +3259,10 @@ $(document).ready(function() {
         }
 
         async function fetchUsers() {
-            // Fetch all users from profiles
+            // Fetch all users from profiles (now includes email column)
             const { data: profiles, error } = await supabase
                 .from('profiles')
-                .select('id, full_name, role, team, created_at, disabled')
+                .select('id, full_name, email, role, team, created_at, disabled')
                 .order('created_at', { ascending: false });
 
             if (error) {
@@ -2946,9 +3270,6 @@ $(document).ready(function() {
                 return [];
             }
 
-            // Get auth users to get email addresses
-            // Note: We can't directly query auth.users from client, so we'll use the profile data
-            // In a real implementation, you might need a server-side function to get emails
             return profiles || [];
         }
 
@@ -2982,7 +3303,7 @@ $(document).ready(function() {
                 
                 const tr = `
                     <tr class="${isDisabled ? 'table-secondary' : ''}">
-                        <td>${escapeHtml(u.id.substring(0, 8))}...</td>
+                        <td>${escapeHtml(u.email || 'N/A')}</td>
                         <td>${escapeHtml(u.full_name || 'N/A')}${disabledBadge}</td>
                         <td>${escapeHtml(u.role || 'Team Member')}</td>
                         <td>${escapeHtml(u.team || 'N/A')}</td>
@@ -3023,14 +3344,308 @@ $(document).ready(function() {
             }
         }
 
+        // Fetch functions for new tabs
+        async function fetchContracts() {
+            const { data, error } = await supabase
+                .from('contracts')
+                .select('*')
+                .order('created_at', { ascending: false });
+            if (error) {
+                console.error('Error fetching contracts:', error);
+                return [];
+            }
+            return data || [];
+        }
+
+        async function fetchTeams() {
+            const { data, error } = await supabase
+                .from('teams')
+                .select('*, contracts(name, code)')
+                .order('created_at', { ascending: false });
+            if (error) {
+                console.error('Error fetching teams:', error);
+                return [];
+            }
+            return data || [];
+        }
+
+        async function fetchPWSLineItems() {
+            const { data, error } = await supabase
+                .from('pws_line_items')
+                .select('*, contracts(name, code)')
+                .order('created_at', { ascending: false });
+            if (error) {
+                console.error('Error fetching PWS line items:', error);
+                return [];
+            }
+            return data || [];
+        }
+
+        async function fetchContractRoles() {
+            const { data, error } = await supabase
+                .from('user_contract_roles')
+                .select('*, contracts(name, code)')
+                .order('created_at', { ascending: false });
+            if (error) {
+                console.error('Error fetching contract roles:', error);
+                return [];
+            }
+            
+            // Fetch user names separately since user_contract_roles references auth.users
+            if (data && data.length > 0) {
+                const userIds = [...new Set(data.map(r => r.user_id))];
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', userIds);
+                
+                // Map profiles to roles
+                const profileMap = {};
+                if (profiles) {
+                    profiles.forEach(p => profileMap[p.id] = p);
+                }
+                
+                return data.map(role => ({
+                    ...role,
+                    profiles: profileMap[role.user_id] || null
+                }));
+            }
+            
+            return data || [];
+        }
+
+        async function fetchTeamMemberships(teamId) {
+            const { data, error } = await supabase
+                .from('team_memberships')
+                .select('*')
+                .eq('team_id', teamId);
+            if (error) {
+                console.error('Error fetching team memberships:', error);
+                return [];
+            }
+            
+            // Fetch user names separately since team_memberships references auth.users
+            if (data && data.length > 0) {
+                const userIds = [...new Set(data.map(m => m.user_id))];
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .in('id', userIds);
+                
+                // Map profiles to memberships
+                const profileMap = {};
+                if (profiles) {
+                    profiles.forEach(p => profileMap[p.id] = p);
+                }
+                
+                return data.map(membership => ({
+                    ...membership,
+                    profiles: profileMap[membership.user_id] || null
+                }));
+            }
+            
+            return data || [];
+        }
+
+        // Render functions for new tabs
+        function renderContractsTable() {
+            const tbody = $('#contracts-table tbody');
+            tbody.empty();
+            if (!state.contracts.length) {
+                tbody.append('<tr><td colspan="5" class="text-muted">No contracts found.</td></tr>');
+                return;
+            }
+            for (const c of state.contracts) {
+                const statusBadge = c.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Archived</span>';
+                const archiveBtn = c.is_active 
+                    ? `<button class="btn btn-sm btn-warning ms-1 archive-contract-btn" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Archive</button>`
+                    : `<button class="btn btn-sm btn-success ms-1 activate-contract-btn" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Activate</button>`;
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(c.code)}</td>
+                        <td>${escapeHtml(c.name)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${formatDateTime(c.created_at)}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-contract-btn" data-id="${c.id}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(c.name)}">Edit</button>
+                            ${archiveBtn}
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function renderTeamsTable() {
+            const tbody = $('#teams-table tbody');
+            tbody.empty();
+            
+            const filterContractId = $('#teams-contract-filter').val();
+            const filteredTeams = filterContractId 
+                ? state.teams.filter(t => t.contract_id === filterContractId)
+                : state.teams;
+            
+            if (!filteredTeams.length) {
+                tbody.append('<tr><td colspan="5" class="text-muted">No teams found.</td></tr>');
+                return;
+            }
+            for (const t of filteredTeams) {
+                const statusBadge = t.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-secondary">Inactive</span>';
+                const memberCount = state.teamMemberships[t.id] ? state.teamMemberships[t.id].length : 0;
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(t.contracts?.name || 'N/A')}</td>
+                        <td>${escapeHtml(t.name)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${memberCount} member(s)</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-team-btn" data-id="${t.id}" data-contract-id="${t.contract_id}" data-name="${escapeHtml(t.name)}">Edit</button>
+                            <button class="btn btn-sm btn-info ms-1 manage-members-btn" data-id="${t.id}" data-name="${escapeHtml(t.name)}">Members</button>
+                            <button class="btn btn-sm btn-warning ms-1 toggle-team-btn" data-id="${t.id}" data-active="${t.is_active}">${t.is_active ? 'Deactivate' : 'Activate'}</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function renderPWSTable() {
+            const tbody = $('#pws-table tbody');
+            tbody.empty();
+            
+            const filterContractId = $('#pws-contract-filter').val();
+            const filteredPWS = filterContractId 
+                ? state.pwsLineItems.filter(p => p.contract_id === filterContractId)
+                : state.pwsLineItems;
+            
+            if (!filteredPWS.length) {
+                tbody.append('<tr><td colspan="6" class="text-muted">No PWS line items found.</td></tr>');
+                return;
+            }
+            for (const p of filteredPWS) {
+                const statusBadge = p.is_active ? '<span class="badge bg-success">Active</span>' : '<span class="badge bg-danger">Retired</span>';
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(p.contracts?.name || 'N/A')}</td>
+                        <td>${escapeHtml(p.code)}</td>
+                        <td>${escapeHtml(p.title)}</td>
+                        <td>${escapeHtml(p.periodicity || 'N/A')}</td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <button class="btn btn-sm btn-primary edit-pws-btn" data-id="${p.id}" data-contract-id="${p.contract_id}" data-code="${escapeHtml(p.code)}" data-title="${escapeHtml(p.title)}" data-description="${escapeHtml(p.description || '')}" data-periodicity="${escapeHtml(p.periodicity || '')}">Edit</button>
+                            <button class="btn btn-sm btn-${p.is_active ? 'warning' : 'success'} ms-1 toggle-pws-btn" data-id="${p.id}" data-active="${p.is_active}">${p.is_active ? 'Retire' : 'Activate'}</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function renderContractRolesTable() {
+            const tbody = $('#contract-roles-table tbody');
+            tbody.empty();
+            
+            const filterContractId = $('#roles-contract-filter').val();
+            const filteredRoles = filterContractId 
+                ? state.contractRoles.filter(r => r.contract_id === filterContractId)
+                : state.contractRoles;
+            
+            if (!filteredRoles.length) {
+                tbody.append('<tr><td colspan="4" class="text-muted">No contract roles assigned.</td></tr>');
+                return;
+            }
+            for (const r of filteredRoles) {
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(r.profiles?.full_name || 'Unknown User')}</td>
+                        <td>${escapeHtml(r.contracts?.name || 'N/A')}</td>
+                        <td><span class="badge bg-primary">${escapeHtml(r.role)}</span></td>
+                        <td>
+                            <button class="btn btn-sm btn-danger delete-contract-role-btn" data-id="${r.id}" data-user="${escapeHtml(r.profiles?.full_name || 'User')}" data-contract="${escapeHtml(r.contracts?.name || 'Contract')}">Remove</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        function renderMembershipsTable() {
+            const tbody = $('#memberships-table tbody');
+            tbody.empty();
+            const teamId = $('#membership-team-id').val();
+            const memberships = state.teamMemberships[teamId] || [];
+            
+            if (!memberships.length) {
+                tbody.append('<tr><td colspan="3" class="text-muted">No members assigned.</td></tr>');
+                return;
+            }
+            for (const m of memberships) {
+                const roleBadge = m.role_in_team === 'lead' 
+                    ? '<span class="badge bg-warning">Lead</span>' 
+                    : '<span class="badge bg-info">Member</span>';
+                const tr = `
+                    <tr>
+                        <td>${escapeHtml(m.profiles?.full_name || 'Unknown User')}</td>
+                        <td>${roleBadge}</td>
+                        <td>
+                            <button class="btn btn-sm btn-danger remove-membership-btn" data-id="${m.id}" data-user="${escapeHtml(m.profiles?.full_name || 'User')}">Remove</button>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(tr);
+            }
+        }
+
+        // Populate dropdowns
+        function populateContractDropdowns() {
+            const selects = ['#team-contract', '#pws-contract', '#contract-role-contract', '#teams-contract-filter', '#pws-contract-filter', '#roles-contract-filter'];
+            selects.forEach(sel => {
+                const $select = $(sel);
+                const currentVal = $select.val();
+                const isFilter = sel.includes('-filter');
+                $select.find('option:not(:first)').remove();
+                state.contracts.filter(c => c.is_active).forEach(c => {
+                    $select.append(`<option value="${c.id}">${escapeHtml(c.name)} (${escapeHtml(c.code)})</option>`);
+                });
+                if (currentVal) $select.val(currentVal);
+            });
+        }
+
+        function populateUserDropdowns() {
+            const selects = ['#membership-user', '#contract-role-user'];
+            selects.forEach(sel => {
+                const $select = $(sel);
+                $select.find('option:not(:first)').remove();
+                state.users.filter(u => !u.disabled).forEach(u => {
+                    $select.append(`<option value="${u.id}">${escapeHtml(u.full_name || 'Unknown')}</option>`);
+                });
+            });
+        }
+
         async function load() {
             const hasAccess = await checkAdminAccess();
             if (!hasAccess) return;
 
             state.users = await fetchUsers();
             state.requests = await fetchAccountRequests();
+            state.contracts = await fetchContracts();
+            state.teams = await fetchTeams();
+            state.pwsLineItems = await fetchPWSLineItems();
+            state.contractRoles = await fetchContractRoles();
+            
+            // Fetch memberships for all teams
+            for (const team of state.teams) {
+                state.teamMemberships[team.id] = await fetchTeamMemberships(team.id);
+            }
+            
             renderUsersTable();
             renderRequestsTable();
+            renderContractsTable();
+            renderTeamsTable();
+            renderPWSTable();
+            renderContractRolesTable();
+            populateContractDropdowns();
+            populateUserDropdowns();
         }
 
         // Event handler: Edit Role button
@@ -3252,6 +3867,406 @@ $(document).ready(function() {
             load(); // Reload data
         });
 
+        // ===== CONTRACT EVENT HANDLERS =====
+        $(document).off('click', '#new-contract-btn').on('click', '#new-contract-btn', function() {
+            $('#contract-id').val('');
+            $('#contract-code').val('').prop('disabled', false);
+            $('#contract-name').val('');
+            $('#contract-form-error').hide();
+            $('#contractModalLabel').text('New Contract');
+            const modalEl = document.getElementById('contract-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('click', '.edit-contract-btn').on('click', '.edit-contract-btn', function() {
+            const id = $(this).data('id');
+            const code = $(this).data('code');
+            const name = $(this).data('name');
+            $('#contract-id').val(id);
+            $('#contract-code').val(code).prop('disabled', true);
+            $('#contract-name').val(name);
+            $('#contract-form-error').hide();
+            $('#contractModalLabel').text('Edit Contract');
+            const modalEl = document.getElementById('contract-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('submit', '#contract-form').on('submit', '#contract-form', async function(e) {
+            e.preventDefault();
+            const id = $('#contract-id').val();
+            const code = $('#contract-code').val().trim();
+            const name = $('#contract-name').val().trim();
+
+            if (id) {
+                // Update
+                const { error } = await supabase
+                    .from('contracts')
+                    .update({ name, updated_at: new Date().toISOString() })
+                    .eq('id', id);
+                if (error) {
+                    $('#contract-form-error').text('Error updating contract: ' + error.message).show();
+                    return;
+                }
+            } else {
+                // Insert
+                const { error } = await supabase
+                    .from('contracts')
+                    .insert([{ code, name }]);
+                if (error) {
+                    $('#contract-form-error').text('Error creating contract: ' + error.message).show();
+                    return;
+                }
+            }
+
+            const modalEl = document.getElementById('contract-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+            alert('Contract saved successfully!');
+            load();
+        });
+
+        $(document).off('click', '.archive-contract-btn').on('click', '.archive-contract-btn', async function() {
+            const id = $(this).data('id');
+            const name = $(this).data('name');
+            if (!confirm(`Archive contract "${name}"? This will hide it from dropdowns but preserve all data.`)) return;
+            const { error } = await supabase
+                .from('contracts')
+                .update({ is_active: false, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) {
+                alert('Error archiving contract: ' + error.message);
+                return;
+            }
+            alert('Contract archived successfully!');
+            load();
+        });
+
+        $(document).off('click', '.activate-contract-btn').on('click', '.activate-contract-btn', async function() {
+            const id = $(this).data('id');
+            const { error } = await supabase
+                .from('contracts')
+                .update({ is_active: true, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) {
+                alert('Error activating contract: ' + error.message);
+                return;
+            }
+            alert('Contract activated successfully!');
+            load();
+        });
+
+        // ===== TEAM EVENT HANDLERS =====
+        $(document).off('click', '#new-team-btn').on('click', '#new-team-btn', function() {
+            $('#team-id').val('');
+            $('#team-contract').val('');
+            $('#team-name').val('');
+            $('#team-form-error').hide();
+            $('#teamModalLabel').text('New Team');
+            const modalEl = document.getElementById('team-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('click', '.edit-team-btn').on('click', '.edit-team-btn', function() {
+            const id = $(this).data('id');
+            const contractId = $(this).data('contract-id');
+            const name = $(this).data('name');
+            $('#team-id').val(id);
+            $('#team-contract').val(contractId);
+            $('#team-name').val(name);
+            $('#team-form-error').hide();
+            $('#teamModalLabel').text('Edit Team');
+            const modalEl = document.getElementById('team-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('submit', '#team-form').on('submit', '#team-form', async function(e) {
+            e.preventDefault();
+            const id = $('#team-id').val();
+            const contractId = $('#team-contract').val();
+            const name = $('#team-name').val().trim();
+
+            if (id) {
+                // Update
+                const { error } = await supabase
+                    .from('teams')
+                    .update({ contract_id: contractId, name, updated_at: new Date().toISOString() })
+                    .eq('id', id);
+                if (error) {
+                    $('#team-form-error').text('Error updating team: ' + error.message).show();
+                    return;
+                }
+            } else {
+                // Insert
+                const { error } = await supabase
+                    .from('teams')
+                    .insert([{ contract_id: contractId, name }]);
+                if (error) {
+                    $('#team-form-error').text('Error creating team: ' + error.message).show();
+                    return;
+                }
+            }
+
+            const modalEl = document.getElementById('team-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+            alert('Team saved successfully!');
+            load();
+        });
+
+        $(document).off('click', '.toggle-team-btn').on('click', '.toggle-team-btn', async function() {
+            const id = $(this).data('id');
+            const isActive = $(this).data('active');
+            const newState = !isActive;
+            const { error } = await supabase
+                .from('teams')
+                .update({ is_active: newState, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) {
+                alert('Error toggling team status: ' + error.message);
+                return;
+            }
+            alert(`Team ${newState ? 'activated' : 'deactivated'} successfully!`);
+            load();
+        });
+
+        $(document).off('change', '#teams-contract-filter').on('change', '#teams-contract-filter', function() {
+            renderTeamsTable();
+        });
+
+        // ===== TEAM MEMBERSHIP EVENT HANDLERS =====
+        $(document).off('click', '.manage-members-btn').on('click', '.manage-members-btn', async function() {
+            const teamId = $(this).data('id');
+            const teamName = $(this).data('name');
+            $('#membership-team-id').val(teamId);
+            $('#membership-team-name').text(teamName);
+            $('#membership-user').val('');
+            $('#membership-role').val('member');
+            $('#membership-form-error').hide();
+            
+            // Fetch and render memberships
+            state.teamMemberships[teamId] = await fetchTeamMemberships(teamId);
+            renderMembershipsTable();
+            
+            const modalEl = document.getElementById('team-membership-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('submit', '#add-membership-form').on('submit', '#add-membership-form', async function(e) {
+            e.preventDefault();
+            const teamId = $('#membership-team-id').val();
+            const userId = $('#membership-user').val();
+            const role = $('#membership-role').val();
+
+            const { error } = await supabase
+                .from('team_memberships')
+                .insert([{ team_id: teamId, user_id: userId, role_in_team: role }]);
+            
+            if (error) {
+                $('#membership-form-error').text('Error adding member: ' + error.message).show();
+                return;
+            }
+
+            $('#membership-form-error').hide();
+            $('#membership-user').val('');
+            state.teamMemberships[teamId] = await fetchTeamMemberships(teamId);
+            renderMembershipsTable();
+            renderTeamsTable(); // Update member count
+            alert('Member added successfully!');
+        });
+
+        $(document).off('click', '.remove-membership-btn').on('click', '.remove-membership-btn', async function() {
+            const id = $(this).data('id');
+            const userName = $(this).data('user');
+            if (!confirm(`Remove ${userName} from this team?`)) return;
+
+            const { error } = await supabase
+                .from('team_memberships')
+                .delete()
+                .eq('id', id);
+            
+            if (error) {
+                alert('Error removing member: ' + error.message);
+                return;
+            }
+
+            const teamId = $('#membership-team-id').val();
+            state.teamMemberships[teamId] = await fetchTeamMemberships(teamId);
+            renderMembershipsTable();
+            renderTeamsTable(); // Update member count
+            alert('Member removed successfully!');
+        });
+
+        // ===== PWS LINE ITEM EVENT HANDLERS =====
+        $(document).off('click', '#new-pws-btn').on('click', '#new-pws-btn', function() {
+            $('#pws-id').val('');
+            $('#pws-contract').val('');
+            $('#pws-code').val('');
+            $('#pws-title').val('');
+            $('#pws-description').val('');
+            $('#pws-periodicity').val('');
+            $('#pws-form-error').hide();
+            $('#pwsModalLabel').text('New PWS Line Item');
+            const modalEl = document.getElementById('pws-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('click', '.edit-pws-btn').on('click', '.edit-pws-btn', function() {
+            const id = $(this).data('id');
+            const contractId = $(this).data('contract-id');
+            const code = $(this).data('code');
+            const title = $(this).data('title');
+            const description = $(this).data('description');
+            const periodicity = $(this).data('periodicity');
+            $('#pws-id').val(id);
+            $('#pws-contract').val(contractId);
+            $('#pws-code').val(code);
+            $('#pws-title').val(title);
+            $('#pws-description').val(description);
+            $('#pws-periodicity').val(periodicity);
+            $('#pws-form-error').hide();
+            $('#pwsModalLabel').text('Edit PWS Line Item');
+            const modalEl = document.getElementById('pws-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('submit', '#pws-form').on('submit', '#pws-form', async function(e) {
+            e.preventDefault();
+            const id = $('#pws-id').val();
+            const contractId = $('#pws-contract').val();
+            const code = $('#pws-code').val().trim();
+            const title = $('#pws-title').val().trim();
+            const description = $('#pws-description').val().trim();
+            const periodicity = $('#pws-periodicity').val();
+
+            if (id) {
+                // Update
+                const { error } = await supabase
+                    .from('pws_line_items')
+                    .update({ 
+                        contract_id: contractId,
+                        code,
+                        title,
+                        description: description || null,
+                        periodicity: periodicity || null,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id);
+                if (error) {
+                    $('#pws-form-error').text('Error updating PWS line item: ' + error.message).show();
+                    return;
+                }
+            } else {
+                // Insert
+                const { error } = await supabase
+                    .from('pws_line_items')
+                    .insert([{ 
+                        contract_id: contractId,
+                        code,
+                        title,
+                        description: description || null,
+                        periodicity: periodicity || null
+                    }]);
+                if (error) {
+                    $('#pws-form-error').text('Error creating PWS line item: ' + error.message).show();
+                    return;
+                }
+            }
+
+            const modalEl = document.getElementById('pws-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+            alert('PWS line item saved successfully!');
+            load();
+        });
+
+        $(document).off('click', '.toggle-pws-btn').on('click', '.toggle-pws-btn', async function() {
+            const id = $(this).data('id');
+            const isActive = $(this).data('active');
+            const newState = !isActive;
+            const action = newState ? 'activate' : 'retire';
+            if (!confirm(`Are you sure you want to ${action} this PWS line item?`)) return;
+            
+            const { error } = await supabase
+                .from('pws_line_items')
+                .update({ is_active: newState, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) {
+                alert(`Error ${action}ing PWS line item: ` + error.message);
+                return;
+            }
+            alert(`PWS line item ${action}d successfully!`);
+            load();
+        });
+
+        $(document).off('change', '#pws-contract-filter').on('change', '#pws-contract-filter', function() {
+            renderPWSTable();
+        });
+
+        // ===== CONTRACT ROLE EVENT HANDLERS =====
+        $(document).off('click', '#new-contract-role-btn').on('click', '#new-contract-role-btn', function() {
+            $('#contract-role-id').val('');
+            $('#contract-role-user').val('');
+            $('#contract-role-contract').val('');
+            $('#contract-role-role').val('');
+            $('#contract-role-form-error').hide();
+            const modalEl = document.getElementById('contract-role-modal');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        });
+
+        $(document).off('submit', '#contract-role-form').on('submit', '#contract-role-form', async function(e) {
+            e.preventDefault();
+            const userId = $('#contract-role-user').val();
+            const contractId = $('#contract-role-contract').val();
+            const role = $('#contract-role-role').val();
+
+            const { error } = await supabase
+                .from('user_contract_roles')
+                .insert([{ user_id: userId, contract_id: contractId, role }]);
+            
+            if (error) {
+                $('#contract-role-form-error').text('Error assigning role: ' + error.message).show();
+                return;
+            }
+
+            const modalEl = document.getElementById('contract-role-modal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            modal.hide();
+            alert('Contract role assigned successfully!');
+            load();
+        });
+
+        $(document).off('click', '.delete-contract-role-btn').on('click', '.delete-contract-role-btn', async function() {
+            const id = $(this).data('id');
+            const userName = $(this).data('user');
+            const contractName = $(this).data('contract');
+            if (!confirm(`Remove ${userName}'s role from ${contractName}?`)) return;
+
+            const { error } = await supabase
+                .from('user_contract_roles')
+                .delete()
+                .eq('id', id);
+            
+            if (error) {
+                alert('Error removing contract role: ' + error.message);
+                return;
+            }
+
+            alert('Contract role removed successfully!');
+            load();
+        });
+
+        $(document).off('change', '#roles-contract-filter').on('change', '#roles-contract-filter', function() {
+            renderContractRolesTable();
+        });
+
         load();
     }
 
@@ -3295,17 +4310,62 @@ $(document).ready(function() {
         router(); // Route after checking auth status
     }
 
+    // Store current user role and session version for change detection
+    let currentUserRole = null;
+    let currentSessionVersion = null;
+
     async function updateUI() {
         if (currentUser) {
             $('#login-btn').hide();
             $('#logout-btn').show();
             
-            // Update navigation based on user role
+            // Update navigation based on user role and check session validity
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('role, session_version, disabled')
                 .eq('id', currentUser.id)
                 .single();
+            
+            // If profile not found or user is disabled, force logout
+            if (!profile || profile.disabled) {
+                console.log('User profile not found or disabled - forcing logout');
+                await supabase.auth.signOut();
+                currentUser = null;
+                currentUserRole = null;
+                currentSessionVersion = null;
+                await updateUI();
+                window.location.hash = '';
+                await router();
+                return;
+            }
+            
+            // Check if session version has changed (user was disabled/enabled or role changed)
+            if (currentSessionVersion !== null && profile.session_version !== currentSessionVersion) {
+                console.log('Session invalidated (version changed from', currentSessionVersion, 'to', profile.session_version, ') - forcing logout');
+                await supabase.auth.signOut();
+                currentUser = null;
+                currentUserRole = null;
+                currentSessionVersion = null;
+                alert('Your session has been terminated. Please log in again.');
+                window.location.reload();
+                return;
+            }
+            
+            // Check if role has changed (admin changed it)
+            if (currentUserRole && profile && profile.role !== currentUserRole) {
+                console.log('Role changed from', currentUserRole, 'to', profile.role, '- reloading page');
+                currentUserRole = profile.role;
+                currentSessionVersion = profile.session_version;
+                // Force page reload to update navigation and route to correct page
+                window.location.reload();
+                return;
+            }
+            
+            // Store current role and session version
+            if (profile) {
+                currentUserRole = profile.role;
+                currentSessionVersion = profile.session_version;
+            }
             
             const nav = $('#main-nav');
             nav.empty();
@@ -3377,7 +4437,10 @@ $(document).ready(function() {
         // Always clear local state regardless of server response
         currentUser = null;
         await updateUI();
-        window.location.hash = ''; // Go to login page - hashchange event will trigger router
+        
+        // Clear hash and explicitly call router to show login page
+        window.location.hash = '';
+        await router();
     });
 
     $(document).on('submit', '#request-account-form', async function(e) {
@@ -3398,6 +4461,25 @@ $(document).ready(function() {
             $(this).trigger('reset');
         }
     });
+
+    // Periodic session validation check
+    setInterval(async () => {
+        if (currentUser) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role, session_version, disabled')
+                .eq('id', currentUser.id)
+                .single();
+            
+            // If profile not found, user disabled, or session version changed, trigger updateUI
+            if (!profile || profile.disabled || 
+                (currentSessionVersion !== null && profile.session_version !== currentSessionVersion) ||
+                (currentUserRole && profile.role !== currentUserRole)) {
+                console.log('Session state change detected in background check');
+                await updateUI();
+            }
+        }
+    }, 5000); // Check every 5 seconds for faster response
 
     // --- APP START ---
     $('#app').html(appLayout);
