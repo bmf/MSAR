@@ -66,10 +66,10 @@
     --surface: #22252b;
     --surface-hover: #2a2d35;
     
-    /* Text: 4.5:1 contrast on dark backgrounds */
-    --text-primary: #e9ecef;
-    --text-secondary: #adb5bd;
-    --text-muted: #6c757d;
+    /* Text: Enhanced brightness for better visibility on dark backgrounds */
+    --text-primary: #f8f9fa;
+    --text-secondary: #ced4da;
+    --text-muted: #868e96;
     
     --border-color: #495057;
     --border-focus: #6ea8fe;
@@ -212,10 +212,22 @@ body {
 
 /* Tables */
 .table {
-    color: var(--text-primary);
     border-color: var(--table-border);
 }
 
+/* Light mode: dark text on light backgrounds */
+.table th,
+.table td {
+    color: var(--text-primary);
+}
+
+.table thead th {
+    border-bottom-color: var(--table-border);
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Striped rows - light mode has light gray stripes */
 .table-striped > tbody > tr:nth-of-type(odd) > * {
     background-color: var(--table-stripe);
 }
@@ -228,8 +240,27 @@ body {
     border-bottom-color: var(--table-border);
 }
 
-.table thead th {
-    border-bottom-color: var(--table-border);
+/* Dark mode specific: ensure text is always readable */
+[data-theme="dark"] .table {
+    --bs-table-bg: transparent;
+    --bs-table-striped-bg: var(--table-stripe);
+    --bs-table-hover-bg: var(--table-hover);
+    --bs-table-color: var(--text-primary);
+}
+
+[data-theme="dark"] .table th,
+[data-theme="dark"] .table td {
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    --bs-table-bg-type: var(--table-stripe);
+    color: var(--text-primary);
+}
+
+[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+    --bs-table-bg-state: var(--table-hover);
+    color: var(--text-primary);
 }
 
 /* Modals */
