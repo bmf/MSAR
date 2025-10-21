@@ -10,6 +10,40 @@ $(document).ready(function() {
     window.msrSupabase = supabase; // expose for console diagnostics
     let currentUser = null;
     
+    // --- THEME MANAGEMENT ---
+    function initTheme() {
+        // Load saved theme preference or default to light
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        applyTheme(savedTheme);
+    }
+
+    function applyTheme(theme) {
+        document.body.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        
+        // Update toggle button
+        const toggleBtn = document.getElementById('theme-toggle-btn');
+        if (toggleBtn) {
+            const icon = toggleBtn.querySelector('.theme-toggle-icon');
+            const isPressed = theme === 'dark';
+            toggleBtn.setAttribute('aria-pressed', isPressed);
+            toggleBtn.setAttribute('aria-label', isPressed ? 'Switch to light mode' : 'Switch to dark mode');
+            toggleBtn.setAttribute('title', isPressed ? 'Switch to light mode' : 'Switch to dark mode');
+            if (icon) {
+                icon.textContent = isPressed ? '☀️' : '🌙';
+            }
+        }
+    }
+
+    function toggleTheme() {
+        const currentTheme = document.body.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        applyTheme(newTheme);
+    }
+
+    // Initialize theme on page load
+    initTheme();
+    
     // --- UTILITY FUNCTIONS ---
     function escapeHtml(s) {
         return String(s)
@@ -27,8 +61,17 @@ $(document).ready(function() {
                 <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
                     <a href="#dashboard" class="d-flex align-items-center mb-2 mb-lg-0 text-dark text-decoration-none"><h4>MSR Webform</h4></a>
                     <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0" id="main-nav"></ul>
-                    <div class="text-end">
-                        <button type="button" class="btn btn-outline-primary me-2" id="login-btn">Login</button>
+                    <div class="text-end d-flex align-items-center gap-2">
+                        <button type="button" 
+                                class="theme-toggle" 
+                                id="theme-toggle-btn"
+                                aria-label="Toggle dark mode"
+                                aria-pressed="false"
+                                title="Toggle dark mode">
+                            <span class="theme-toggle-icon" aria-hidden="true">🌙</span>
+                            <span class="visually-hidden">Toggle dark mode</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" id="login-btn">Login</button>
                         <button type="button" class="btn btn-primary" id="logout-btn" style="display: none;">Logout</button>
                     </div>
                 </div>
@@ -4390,6 +4433,10 @@ $(document).ready(function() {
     }
 
     // --- EVENT HANDLERS ---
+    $(document).on('click', '#theme-toggle-btn', function() {
+        toggleTheme();
+    });
+
     $(document).on('submit', '#login-form', async function(e) {
         e.preventDefault();
         const email = $('#email').val();
@@ -4483,6 +4530,9 @@ $(document).ready(function() {
 
     // --- APP START ---
     $('#app').html(appLayout);
+    // Reapply theme to update toggle button state
+    const currentTheme = localStorage.getItem('theme') || 'light';
+    applyTheme(currentTheme);
     checkSession();
     $(window).on('hashchange', router);
 });

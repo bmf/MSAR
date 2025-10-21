@@ -13,6 +13,7 @@ The Monthly Status Report (MSR) Webform application allows team members to submi
 - **Approval Workflow**: Team Lead review → PM/APM approval → PDF export
 - **Monthly Reporting**: Automated report queue and PDF generation
 - **Admin Panel**: Comprehensive CRUD for contracts, teams, PWS line items, and roles
+- **Dark Mode**: Section 508 compliant dark theme with WCAG 2.1 AA contrast ratios
 
 ## Tech Stack
 
@@ -157,6 +158,23 @@ MSAR/
 ├── server.js                    # Local dev server
 └── vercel.json                  # Vercel configuration
 ```
+
+## Dark Mode
+
+The application includes a fully accessible dark mode that meets Section 508 and WCAG 2.1 AA standards.
+
+**Features:**
+- Toggle between light and dark themes using the button in the header (🌙/☀️)
+- Theme preference persists across sessions
+- Keyboard accessible (Tab to focus, Enter/Space to toggle)
+- Screen reader compatible with ARIA labels
+- All components maintain ≥4.5:1 contrast ratio for text
+- Works across all major browsers (Chrome, Edge, Firefox)
+
+**For Developers:**
+- See [Developer Guide - Dark Mode](docs/reference/Developer_Guide.md#dark-mode-phase-13) for implementation details
+- See [Dark Mode Contrast Report](docs/testing/Dark_Mode_Contrast_Report.md) for WCAG compliance verification
+- See [Dark Mode Cross-Browser Tests](docs/testing/Dark_Mode_CrossBrowser.md) for browser compatibility
 
 ## Documentation
 

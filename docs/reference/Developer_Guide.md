@@ -824,6 +824,153 @@ Brief description of changes
 
 ---
 
+## Dark Mode (Phase 13)
+
+### Overview
+
+The application includes a Section 508 compliant dark mode implementation that meets WCAG 2.1 AA contrast requirements. Users can toggle between light and dark themes, with their preference persisted across sessions.
+
+### CSS Variables
+
+All colors are defined using CSS custom properties (variables) in `/public/src/style.css`:
+
+**Light Theme (Default):**
+```css
+:root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f8f9fa;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --link-color: #0d6efd;
+    --border-color: #dee2e6;
+    /* ... additional variables */
+}
+```
+
+**Dark Theme:**
+```css
+[data-theme="dark"] {
+    --bg-primary: #1a1d23;
+    --bg-secondary: #22252b;
+    --text-primary: #e9ecef;
+    --text-secondary: #adb5bd;
+    --link-color: #6ea8fe;
+    --border-color: #495057;
+    /* ... additional variables */
+}
+```
+
+### Theme Toggle API
+
+**Functions (in app.js):**
+
+```javascript
+// Initialize theme on page load
+initTheme()
+
+// Apply a specific theme
+applyTheme(theme) // theme: 'light' or 'dark'
+
+// Toggle between themes
+toggleTheme()
+```
+
+**Usage Example:**
+```javascript
+// Manually set theme
+applyTheme('dark');
+
+// Toggle current theme
+toggleTheme();
+
+// Get current theme
+const currentTheme = document.body.getAttribute('data-theme');
+```
+
+### Adding New Components
+
+When adding new UI components, ensure they use CSS variables:
+
+```css
+.my-new-component {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.my-new-component:hover {
+    background-color: var(--surface-hover);
+}
+
+.my-new-component:focus {
+    outline: var(--focus-outline);
+    outline-offset: var(--focus-outline-offset);
+}
+```
+
+### Contrast Requirements
+
+All components must meet WCAG 2.1 AA standards:
+- **Body text:** ≥4.5:1 contrast ratio
+- **Large text (18pt+ or 14pt+ bold):** ≥3:1 contrast ratio
+- **UI components:** ≥3:1 contrast ratio
+
+Use the WebAIM Contrast Checker to verify: https://webaim.org/resources/contrastchecker/
+
+### Accessibility Guidelines
+
+1. **Focus Indicators:** All interactive elements must have visible focus outlines
+2. **Non-Color Cues:** Don't rely solely on color to convey information
+3. **ARIA Attributes:** Use appropriate ARIA labels and states
+4. **Keyboard Navigation:** All functionality must be keyboard accessible
+
+### Testing Dark Mode
+
+**Manual Testing:**
+1. Click theme toggle button
+2. Verify theme switches correctly
+3. Reload page and verify theme persists
+4. Test keyboard navigation (Tab, Enter, Space)
+5. Check all pages and components in both themes
+
+**Automated Testing:**
+```bash
+# Run dark mode tests
+npm test -- dark-mode.spec.js
+```
+
+**Contrast Verification:**
+- Use Chrome DevTools Accessibility Inspector
+- Check `docs/testing/Dark_Mode_Contrast_Report.md` for verified components
+
+### Browser Compatibility
+
+Dark mode is tested and supported on:
+- Chrome (latest)
+- Edge (latest)
+- Firefox (latest)
+
+See `docs/testing/Dark_Mode_CrossBrowser.md` for detailed test results.
+
+### Troubleshooting
+
+**Theme not persisting:**
+- Check localStorage is enabled
+- Verify `localStorage.getItem('theme')` returns correct value
+- Check browser console for errors
+
+**Colors not changing:**
+- Verify `data-theme` attribute on `<body>` element
+- Check CSS variables are defined in style.css
+- Ensure components use CSS variables, not hard-coded colors
+
+**Focus outline not visible:**
+- Check `--focus-outline` variable is defined
+- Verify `:focus-visible` styles are not overridden
+- Test with keyboard navigation (Tab key)
+
+---
+
 ## Support
 
 For questions or issues:
